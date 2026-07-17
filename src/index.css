@@ -90,6 +90,7 @@ body {
 .title-bar__midi {
   -webkit-app-region: no-drag;
   margin-left: auto;
+  margin-right: 140px; /* Space for Windows window controls */
   font-size: 11px;
   padding: 3px 8px;
   border-radius: 99px;
@@ -97,6 +98,10 @@ body {
   border: 1px solid var(--border);
   cursor: pointer;
   transition: border-color 0.2s;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 250px;
 }
 .title-bar__midi.connected { color: var(--accent-a); border-color: var(--accent-a); }
 .title-bar__midi:hover { border-color: var(--border-bright); }
