@@ -1,0 +1,224 @@
+const { app, BrowserWindow, ipcMain, dialog, protocol } = require('electron')
+const path = require('path')
+const fs = require('fs')
+const url = require('url')
+const os = require('os')
+const ytSearch = require('yt-search')
+const youtubedl = require('youtube-dl-exec')
+const easymidi = require('easymidi')
+
+const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged
+
+function createWindow() {
+  const win = new BrowserWindow({
+    width: 1400,
+    height: 820,
+    minWidth: 1200,
+    minHeight: 700,
+    backgroundColor: '#0a0a0f',
+    titleBarStyle: 'hidden',
+    titleBarOverlay: {
+      color: '#0a0a0f',
+      symbolColor: '#a0a0b0',
+      height: 32,
+    },
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      webSecurity: false, // needed for local file audio loading
+    },
+  })
+
+  if (isDev) {
+    win.loadURL('http://localhost:5173')
+    win.webContents.openDevTools({ mode: 'detach' })
+  } else {
+    win.loadFile(path.join(__dirname, '../dist/renderer/index.html'))
+  }
+}
+
+app.whenReady().then(() => {
+  // Register protocol to serve local audio files securely
+  protocol.registerFileProtocol('localfile', (request, callback) => {
+    const filePath = decodeURIComponent(request.url.replace('localfile://', ''))
+    callback({ path: filePath })
+  })
+
+  createWindow()
+  app.on('activate', () => {
+    if (BrowserWindow.getAllWindows().length === 0) createWindow()
+  })
+})
+
+app.on('window-all-closed', () => {
+  if (process.platform !== 'darwin') app.quit()
+})
+
+// ─── IPC: Open audio file dialog ───────────────────────────────────────────
+ipcMain.handle('open-audio-files', async () => {
+  const { filePaths } = await dialog.showOpenDialog({
+    title: 'Select Audio Files',
+    filters: [{ name: 'Audio', extensions: ['mp3', 'flac', 'wav', 'ogg', 'aac', 'm4a', 'webm'] }],
+    properties: ['openFile', 'multiSelections'],
+  })
+  return filePaths || []
+})
+
+// ─── IPC: Open folder dialog ────────────────────────────────────────────────
+ipcMain.handle('open-audio-folder', async () => {
+  const { filePaths } = await dialog.showOpenDialog({
+    title: 'Select Music Folder',
+    properties: ['openDirectory'],
+  })
+  if (!filePaths || filePaths.length === 0) return []
+
+  const folder = filePaths[0]
+  const exts = new Set(['.mp3', '.flac', '.wav', '.ogg', '.aac', '.m4a', '.webm'])
+  const results = []
+
+  function scan(dir) {
+    try {
+      const entries = fs.readdirSync(dir, { withFileTypes: true })
+      for (const entry of entries) {
+        const fullPath = path.join(dir, entry.name)
+        if (entry.isDirectory()) {
+          scan(fullPath)
+        } else if (exts.has(path.extname(entry.name).toLowerCase())) {
+          results.push(fullPath)
+        }
+      }
+    } catch (e) {}
+  }
+
+  scan(folder)
+  return results
+})
+
+// ─── IPC: Read audio file as ArrayBuffer ────────────────────────────────────
+ipcMain.handle('read-audio-file', async (_, filePath) => {
+  const buffer = fs.readFileSync(filePath)
+  return buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength)
+})
+
+// ─── IPC: Save/load MIDI mapping ────────────────────────────────────────────
+const mappingPath = path.join(app.getPath('userData'), 'midi-mapping.json')
+
+ipcMain.handle('load-midi-mapping', () => {
+  try {
+    return JSON.parse(fs.readFileSync(mappingPath, 'utf8'))
+  } catch {
+    return null
+  }
+})
+
+ipcMain.handle('save-midi-mapping', (_, mapping) => {
+  fs.writeFileSync(mappingPath, JSON.stringify(mapping, null, 2))
+  return true
+})
+
+// ─── IPC: YouTube Search & Download ─────────────────────────────────────────
+ipcMain.handle('search-youtube', async (_, query) => {
+  try {
+    const r = await ytSearch(query)
+    if (!r || !r.videos || r.videos.length === 0) {
+      throw new Error('No results found on YouTube.')
+    }
+    
+    const video = r.videos[0]
+    const title = video.title.replace(/[\/\\?%*:|"<>]/g, '') // Sanitize filename
+    const videoId = video.videoId
+    
+    // Save to spotifyDJ/songs
+    const songsDir = path.join(__dirname, '../songs')
+    if (!fs.existsSync(songsDir)) {
+      fs.mkdirSync(songsDir, { recursive: true })
+    }
+
+    const tempFilePath = path.join(songsDir, `${videoId}.webm`)
+
+    // If file already exists, just return it
+    if (fs.existsSync(tempFilePath)) {
+      return { path: tempFilePath, name: title }
+    }
+
+    // Download audio stream using yt-dlp as WebM
+    // WebM (Opus) works natively in Web Audio API without needing ffmpeg to fix DASH headers.
+    await youtubedl(video.url, {
+      format: 'bestaudio[ext=webm]',
+      output: tempFilePath,
+      noCheckCertificates: true,
+      noWarnings: true,
+      addHeader: [
+        'referer:youtube.com',
+        'user-agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
+      ]
+    })
+
+    return { path: tempFilePath, name: title }
+  } catch (error) {
+    console.error('YouTube search error:', error)
+    throw error
+  }
+})
+
+// ─── IPC: MIDI via easymidi (Node.js direct) ────────────────────────────────
+let midiInput = null
+
+ipcMain.handle('midi-connect', (event) => {
+  const inputs = easymidi.getInputs()
+  if (inputs.length === 0) {
+    return [] // No MIDI devices found
+  }
+  
+  // Clean up existing connection if reconnecting
+  if (midiInput) {
+    midiInput.close()
+    midiInput = null
+  }
+
+  // Find the ION Discover DJ, or just use the first available MIDI device
+  const targetName = inputs.find(n => n.toLowerCase().includes('ion')) || inputs[0]
+  
+  try {
+    midiInput = new easymidi.Input(targetName)
+    console.log('[MIDI] Connected to Node.js backend:', targetName)
+    
+    const win = BrowserWindow.fromWebContents(event.sender)
+    
+    // Listen for Note On
+    midiInput.on('noteon', (msg) => {
+      win.webContents.send('midi-message', {
+        type: 'noteon',
+        channel: msg.channel,
+        note: msg.note,
+        velocity: msg.velocity
+      })
+    })
+
+    // Listen for Note Off
+    midiInput.on('noteoff', (msg) => {
+      win.webContents.send('midi-message', {
+        type: 'noteoff',
+        channel: msg.channel,
+        note: msg.note,
+        velocity: msg.velocity
+      })
+    })
+
+    // Listen for CC (Control Change)
+    midiInput.on('cc', (msg) => {
+      win.webContents.send('midi-message', {
+        type: 'cc',
+        channel: msg.channel,
+        cc: msg.controller,  // easymidi uses 'controller', frontend expects 'cc'
+        value: msg.value
+      })
+    })
+
+    return [targetName]
+  } catch (err) {
+    console.error('[MIDI] Error opening device:', err)
+    return []
+  }
+})

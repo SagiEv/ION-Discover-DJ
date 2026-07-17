@@ -1,0 +1,74 @@
+# SpotifyDJ
+
+![Electron](https://img.shields.io/badge/Electron-191970?style=for-the-badge&logo=Electron&logoColor=white)
+![React](https://img.shields.io/badge/React-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)
+![Vite](https://img.shields.io/badge/Vite-B73BFE?style=for-the-badge&logo=vite&logoColor=FFD62E)
+![Node.js](https://img.shields.io/badge/Node.js-43853D?style=for-the-badge&logo=node.js&logoColor=white)
+
+SpotifyDJ is a powerful, desktop-based DJ application built with Electron, React, and Vite. It bridges the gap between hardware MIDI controllers (like the ION Discover DJ) and digital mixing, offering a seamless interface for local audio file playback and on-the-fly music searching and downloading.
+
+## 🎛️ Features
+
+- **Dual-Deck Audio Engine**: Real-time scratching, pitch bending, EQ (Treble/Bass), and crossfading powered by the Web Audio API.
+- **Hardware MIDI Integration**: Connect your USB DJ Controller. Features an intuitive MIDI Learn system to instantly map physical knobs, jog wheels, and buttons to software actions.
+- **Dynamic Track Library**: Load music directly from local folders or individual files.
+- **Instant YouTube Fetching**: Search for any song on YouTube and download it directly into your deck without leaving the app.
+
+---
+
+## 📥 YouTube Download Flow & Quality
+
+One of the standout features of SpotifyDJ is its ability to instantly pull tracks from YouTube without requiring an official API key or external encoders.
+
+### How it Works
+1. **Search**: The app uses `yt-search` to quickly scrape YouTube for your search query and fetch the correct video URL.
+2. **Download**: We use `youtube-dl-exec` (a Node.js wrapper for the industry-standard `yt-dlp`) to stream the audio directly from YouTube servers.
+3. **Storage**: Songs are automatically saved permanently into the `SpotifyDJ/songs/` directory so they are cached for instant future playback.
+
+### Audio Quality (Resolution) & Format
+- **Format**: Tracks are explicitly downloaded as **WebM (Opus)**. 
+- **Quality**: The audio stream is pulled at **~160 kbps (48kHz)**. This is the absolute highest audio quality natively provided by standard YouTube. Because the Opus codec is incredibly efficient, this 160 kbps stream is perceptually identical to a 256–320 kbps MP3.
+- **Why WebM?** YouTube serves its high-quality `m4a` streams as fragmented DASH files. Normally, fixing these fragments requires installing `FFmpeg` on the host machine. By downloading the WebM/Opus stream instead, the audio plays *natively and perfectly* within Chromium's Web Audio API, making the app 100% plug-and-play without requiring users to install external media encoders.
+
+---
+
+## 🚀 Installation & Setup
+
+### Prerequisites
+- [Node.js](https://nodejs.org/) (v16 or higher recommended)
+- A connected MIDI DJ Controller (optional, but recommended)
+
+### Getting Started
+
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/yourusername/spotifydj.git
+   cd spotifydj
+   ```
+
+2. **Install dependencies**
+   ```bash
+   npm install
+   ```
+
+3. **Run the application**
+   ```bash
+   npm run dev
+   ```
+   This will concurrently spin up the Vite React frontend and the Electron backend.
+
+4. **Build for Production**
+   ```bash
+   npm run build
+   ```
+   This packages the application into an executable using `electron-builder`.
+
+## 🛠️ Technology Stack
+- **Frontend**: React, Vite, Zustand (State Management)
+- **Backend**: Electron (Node.js)
+- **Audio Processing**: Web Audio API
+- **MIDI**: Web MIDI API
+- **Scraping/Downloading**: `yt-search`, `youtube-dl-exec` (`yt-dlp`)
+
+## 📄 License
+This project is licensed under the ISC License.

@@ -1,0 +1,49 @@
+{
+  "name": "spotifydj",
+  "version": "1.0.0",
+  "description": "ION Discovery DJ × Spotify — local file DJ app",
+  "main": "electron/main.js",
+  "scripts": {
+    "dev": "concurrently \"npm run dev:renderer\" \"npm run dev:electron\"",
+    "dev:renderer": "vite",
+    "dev:electron": "wait-on http://localhost:5173 && cross-env NODE_ENV=development electron .",
+    "build": "vite build && electron-builder",
+    "preview": "vite preview"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.5.1",
+    "concurrently": "^9.1.2",
+    "cross-env": "^10.1.0",
+    "electron": "^36.4.0",
+    "electron-builder": "^26.0.12",
+    "vite": "^6.3.5",
+    "wait-on": "^8.0.3"
+  },
+  "dependencies": {
+    "@distube/ytdl-core": "^4.16.12",
+    "easymidi": "^3.2.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "youtube-dl-exec": "^3.1.9",
+    "yt-search": "^2.13.1",
+    "zustand": "^5.0.5"
+  },
+  "build": {
+    "appId": "com.spotifydj.app",
+    "productName": "SpotifyDJ",
+    "directories": {
+      "output": "dist-app"
+    },
+    "files": [
+      "electron/**/*",
+      "dist/renderer/**/*"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "assets/icon.ico"
+    }
+  }
+}
