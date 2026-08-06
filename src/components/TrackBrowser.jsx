@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react'
+import React, { useCallback, useState, useEffect, useRef } from 'react'
 import { useAppStore } from '../store/appStore.js'
 import { getDJController } from '../engine/DJController.js'
 
@@ -14,16 +14,49 @@ export function TrackBrowser() {
   const browseIndex = useAppStore(s => s.browseIndex)
   const setBrowseIndex = useAppStore(s => s.setBrowseIndex)
   const addTracks = useAppStore(s => s.addTracks)
+  const addToQueue = useAppStore(s => s.addToQueue)
   const dj = getDJController()
   const [isDownloading, setIsDownloading] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
+  const [suggestions, setSuggestions] = useState([])
+  const [showDropdown, setShowDropdown] = useState(false)
+  const [activeIndex, setActiveIndex] = useState(-1)
+  const debounceTimer = useRef(null)
 
-  const searchYouTube = useCallback(async () => {
-    if (!searchQuery) return
+  useEffect(() => {
+    if (!searchQuery.trim()) {
+      setSuggestions([])
+      setShowDropdown(false)
+      return
+    }
+    
+    // Don't fetch if we just selected a suggestion
+    if (!showDropdown && suggestions.length === 0) return
 
+    clearTimeout(debounceTimer.current)
+    debounceTimer.current = setTimeout(async () => {
+      try {
+        const results = await window.electronAPI.getSearchSuggestions(searchQuery)
+        setSuggestions(results || [])
+        setShowDropdown(results && results.length > 0)
+        setActiveIndex(-1)
+      } catch (e) {
+        console.error('Suggest error:', e)
+      }
+    }, 300)
+
+    return () => clearTimeout(debounceTimer.current)
+  }, [searchQuery])
+
+  const searchYouTube = useCallback(async (queryOverride) => {
+    const query = typeof queryOverride === 'string' ? queryOverride : searchQuery
+    if (!query) return
+
+    setShowDropdown(false)
+    setSearchQuery(query)
     setIsDownloading(true)
     try {
-      const trackInfo = await window.electronAPI.searchYouTube(searchQuery)
+      const trackInfo = await window.electronAPI.searchYouTube(query)
       addTracks([{
         path: trackInfo.path,
         name: trackInfo.name,
@@ -75,24 +108,60 @@ export function TrackBrowser() {
         <span>Library</span>
         <button className="browser__btn" onClick={openFiles}>+ Files</button>
         <button className="browser__btn" onClick={openFolder}>+ Folder</button>
-        <div style={{ display: 'flex', gap: '4px', marginLeft: 'auto' }}>
-          <input
-            type="text"
-            placeholder="Search YT..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && searchYouTube()}
-            style={{
-              width: '120px',
-              padding: '0 8px',
-              borderRadius: '4px',
-              border: '1px solid var(--surface-c)',
-              background: 'var(--surface-b)',
-              color: '#fff',
-              fontSize: '12px'
-            }}
-          />
-          <button className="browser__btn" onClick={searchYouTube} disabled={isDownloading || !searchQuery}>
+        <div className="browser__search">
+          <div className="browser__search-wrapper">
+            <svg 
+              className="browser__search-icon" 
+              viewBox="0 0 24 24" 
+              fill="currentColor"
+            >
+              <path d="M21.582,6.186c-0.23-0.86-0.908-1.538-1.768-1.768C18.254,4,12,4,12,4S5.746,4,4.186,4.418 c-0.86,0.23-1.538,0.908-1.768,1.768C2,7.746,2,12,2,12s0,4.254,0.418,5.814c0.23,0.86,0.908,1.538,1.768,1.768 C5.746,20,12,20,12,20s6.254,0,7.814-0.418c0.86-0.23,1.538-0.908,1.768-1.768C22,16.254,22,12,22,12S22,7.746,21.582,6.186z M10,15V9l5.2,3L10,15z"/>
+            </svg>
+            <input
+              type="text"
+              placeholder="Search YouTube..."
+              value={searchQuery}
+              onChange={(e) => {
+                setSearchQuery(e.target.value)
+                setShowDropdown(true)
+              }}
+              onFocus={() => { if (suggestions.length > 0) setShowDropdown(true) }}
+              onBlur={() => setTimeout(() => setShowDropdown(false), 200)}
+              onKeyDown={(e) => {
+                if (e.key === 'ArrowDown') {
+                  e.preventDefault()
+                  setActiveIndex(i => Math.min(i + 1, suggestions.length - 1))
+                } else if (e.key === 'ArrowUp') {
+                  e.preventDefault()
+                  setActiveIndex(i => Math.max(i - 1, -1))
+                } else if (e.key === 'Enter') {
+                  e.preventDefault()
+                  if (activeIndex >= 0 && activeIndex < suggestions.length) {
+                    searchYouTube(suggestions[activeIndex])
+                  } else {
+                    searchYouTube()
+                  }
+                } else if (e.key === 'Escape') {
+                  setShowDropdown(false)
+                }
+              }}
+              className="browser__search-input"
+            />
+            {showDropdown && suggestions.length > 0 && (
+              <ul className="browser__suggestions">
+                {suggestions.map((sug, idx) => (
+                  <li 
+                    key={idx}
+                    className={`browser__suggestion-item ${idx === activeIndex ? 'active' : ''}`}
+                    onMouseDown={() => searchYouTube(sug)}
+                  >
+                    {sug}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+          <button className="browser__btn" onClick={() => searchYouTube()} disabled={isDownloading || !searchQuery}>
             {isDownloading ? 'Wait...' : 'Get'}
           </button>
         </div>
@@ -113,10 +182,29 @@ export function TrackBrowser() {
               onDoubleClick={() => loadToDeck('A')}
               draggable
               onDragStart={(e) => {
+                e.dataTransfer.setData('text/track-index', i.toString())
                 e.dataTransfer.setData('text/plain', i.toString())
               }}
             >
-              <span className="browser__item__name">{track.name}</span>
+              <div className="browser__item__row">
+                <span className="browser__item__name">{track.name}</span>
+                <div className="browser__item__actions">
+                  <button
+                    className="browser__queue-btn browser__queue-btn--a"
+                    onClick={(e) => { e.stopPropagation(); addToQueue('A', track) }}
+                    title="Add to Queue A"
+                  >
+                    +A
+                  </button>
+                  <button
+                    className="browser__queue-btn browser__queue-btn--b"
+                    onClick={(e) => { e.stopPropagation(); addToQueue('B', track) }}
+                    title="Add to Queue B"
+                  >
+                    +B
+                  </button>
+                </div>
+              </div>
               {track.duration > 0 && (
                 <span className="browser__item__meta">
                   {formatDuration(track.duration)}

@@ -1,11 +1,15 @@
-# SpotifyDJ
+# DiscoverTube DJ
+<img src="icon.png" width="128" alt="DiscoverTube DJ Icon" />
 
 ![Electron](https://img.shields.io/badge/Electron-191970?style=for-the-badge&logo=Electron&logoColor=white)
 ![React](https://img.shields.io/badge/React-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)
 ![Vite](https://img.shields.io/badge/Vite-B73BFE?style=for-the-badge&logo=vite&logoColor=FFD62E)
 ![Node.js](https://img.shields.io/badge/Node.js-43853D?style=for-the-badge&logo=node.js&logoColor=white)
 
-SpotifyDJ is a powerful, desktop-based DJ application built with Electron, React, and Vite. It bridges the gap between hardware MIDI controllers (like the ION Discover DJ) and digital mixing, offering a seamless interface for local audio file playback and on-the-fly music searching and downloading.
+DiscoverTube DJ is a powerful, desktop-based DJ application built with Electron, React, and Vite. It bridges the gap between hardware MIDI controllers (like the ION Discover DJ) and digital mixing, offering a seamless interface for local audio file playback and on-the-fly music searching and downloading from YouTube.
+
+![Screenshot](screenshot.png)
+![ION Discover DJ Hardware](ION_DISCOVER_DJ.png)
 
 ## 🎛️ Features
 
@@ -16,14 +20,28 @@ SpotifyDJ is a powerful, desktop-based DJ application built with Electron, React
 
 ---
 
+## 🎛️ Controller Support & MIDI Mappings
+
+The application features a universal **MIDI Learn** overlay, allowing it to work with virtually *any* USB MIDI controller. Custom mappings you create are automatically saved securely to your OS's `AppData/Roaming/discovertubedj` directory.
+
+### Pre-configured Mappings
+If you own an **ION Discover DJ** controller, we have provided a pre-configured mapping file for you! 
+
+1. Look in the `mappings/` directory of this repository for `ion-discover-dj.json`.
+2. Copy this file into your `AppData` directory:
+   - **Windows:** `C:\Users\<YourUsername>\AppData\Roaming\discovertubedj\midi-mapping.json`
+3. Restart the application. Your controller will instantly work with full LED feedback and scratch support!
+
+---
+
 ## 📥 YouTube Download Flow & Quality
 
-One of the standout features of SpotifyDJ is its ability to instantly pull tracks from YouTube without requiring an official API key or external encoders.
+One of the standout features of DiscoverTube DJ is its ability to instantly pull tracks from YouTube without requiring an official API key or external encoders.
 
 ### How it Works
 1. **Search**: The app uses `yt-search` to quickly scrape YouTube for your search query and fetch the correct video URL.
 2. **Download**: We use `youtube-dl-exec` (a Node.js wrapper for the industry-standard `yt-dlp`) to stream the audio directly from YouTube servers.
-3. **Storage**: Songs are automatically saved permanently into the `SpotifyDJ/songs/` directory so they are cached for instant future playback.
+3. **Storage**: Songs are automatically saved permanently into the `DiscoverTubeDJ/songs/` directory so they are cached for instant future playback.
 
 ### Audio Quality (Resolution) & Format
 - **Format**: Tracks are explicitly downloaded as **WebM (Opus)**. 
@@ -42,8 +60,8 @@ One of the standout features of SpotifyDJ is its ability to instantly pull track
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/yourusername/spotifydj.git
-   cd spotifydj
+   git clone https://github.com/yourusername/discovertubedj.git
+   cd discovertubedj
    ```
 
 2. **Install dependencies**

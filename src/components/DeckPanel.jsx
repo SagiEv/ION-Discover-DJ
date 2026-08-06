@@ -10,43 +10,140 @@ function fmt(secs) {
   return `${m}:${s}`
 }
 
-function dBDisplay(normalized) {
-  const db = ((normalized ?? 0.5) * 24 - 12).toFixed(1)
-  return `${db > 0 ? '+' : ''}${db}dB`
+function QueuePanel({ deckId }) {
+  const isA = deckId === 'A'
+  const deckState = useAppStore(s => isA ? s.deckA : s.deckB)
+  const removeFromQueue = useAppStore(s => s.removeFromQueue)
+  const reorderQueue = useAppStore(s => s.reorderQueue)
+  const clearQueue = useAppStore(s => s.clearQueue)
+  const addToQueue = useAppStore(s => s.addToQueue)
+  const library = useAppStore(s => s.library)
+
+  const handleDrop = useCallback((e) => {
+    e.preventDefault()
+    e.currentTarget.classList.remove('deck-queue__drop--active')
+    const trackIndex = e.dataTransfer.getData('text/track-index')
+    const queueReorder = e.dataTransfer.getData('text/queue-reorder')
+
+    if (trackIndex) {
+      const track = library[parseInt(trackIndex, 10)]
+      if (track) addToQueue(deckId, track)
+    } else if (queueReorder) {
+      // Internal queue reorder handled by drag within queue items
+    }
+  }, [deckId, library, addToQueue])
+
+  const handleDragOver = useCallback((e) => {
+    e.preventDefault()
+    e.currentTarget.classList.add('deck-queue__drop--active')
+  }, [])
+
+  const handleDragLeave = useCallback((e) => {
+    e.currentTarget.classList.remove('deck-queue__drop--active')
+  }, [])
+
+  const handleQueueItemDragStart = useCallback((e, index) => {
+    e.dataTransfer.setData('text/queue-from', index.toString())
+    e.dataTransfer.setData('text/queue-deck', deckId)
+    e.currentTarget.classList.add('deck-queue__item--dragging')
+  }, [deckId])
+
+  const handleQueueItemDragEnd = useCallback((e) => {
+    e.currentTarget.classList.remove('deck-queue__item--dragging')
+  }, [])
+
+  const handleQueueItemDrop = useCallback((e, toIndex) => {
+    e.preventDefault()
+    e.stopPropagation()
+    const fromIndex = parseInt(e.dataTransfer.getData('text/queue-from'), 10)
+    const fromDeck = e.dataTransfer.getData('text/queue-deck')
+    if (fromDeck === deckId && !isNaN(fromIndex)) {
+      reorderQueue(deckId, fromIndex, toIndex)
+    }
+  }, [deckId, reorderQueue])
+
+  return (
+    <div
+      className="deck-queue"
+      onDrop={handleDrop}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+    >
+      <div className="deck-queue__header">
+        <span>Queue {deckId}</span>
+        {deckState.queue.length > 0 && (
+          <button
+            className="deck-queue__clear"
+            onClick={() => clearQueue(deckId)}
+            title="Clear queue"
+          >
+            Clear
+          </button>
+        )}
+      </div>
+
+      {/* Now Playing */}
+      {deckState.track && (
+        <div className={`deck-queue__now-playing deck-queue__now-playing--${deckId.toLowerCase()}`}>
+          <span className="deck-queue__np-label">▶ Now Playing</span>
+          <span className="deck-queue__np-title">{deckState.track.name}</span>
+        </div>
+      )}
+
+      {/* Queue Items */}
+      <div className="deck-queue__list">
+        {deckState.queue.length === 0 ? (
+          <div className="deck-queue__empty">
+            Drop tracks here
+          </div>
+        ) : (
+          deckState.queue.map((track, i) => (
+            <div
+              key={`${track.path}-${i}`}
+              className="deck-queue__item"
+              draggable
+              onDragStart={(e) => handleQueueItemDragStart(e, i)}
+              onDragEnd={handleQueueItemDragEnd}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => handleQueueItemDrop(e, i)}
+            >
+              <span className="deck-queue__item-handle">⠿</span>
+              <span className="deck-queue__item-index">{i + 1}</span>
+              <span className="deck-queue__item-name">{track.name}</span>
+              <button
+                className="deck-queue__item-remove"
+                onClick={() => removeFromQueue(deckId, i)}
+                title="Remove"
+              >
+                ×
+              </button>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  )
 }
 
 export function DeckPanel({ deckId }) {
   const deckState = useAppStore(s => deckId === 'A' ? s.deckA : s.deckB)
-  const dj = getDJController()
-
   const isA = deckId === 'A'
-  const deckClass = `deck deck--${deckId.toLowerCase()}`
-  const accent = isA ? 'accent-a' : 'accent-b'
-
-  const onPlay = useCallback(() => dj.playStutter(deckId), [deckId])
-  const onPause = useCallback(() => dj.pause(deckId), [deckId])
-  const onCueDown = useCallback(() => dj.cueDown(deckId), [deckId])
-  const onCueUp = useCallback(() => dj.cueUp(deckId), [deckId])
-  const onSync = useCallback(() => dj.sync(deckId), [deckId])
-  const onRev = useCallback(() => dj.toggleReverse(deckId), [deckId])
-  const onPitchDown = useCallback(() => dj.pitchBendDown(deckId), [deckId])
-  const onPitchUp = useCallback(() => dj.pitchBendUp(deckId), [deckId])
-  const onPitchRelease = useCallback(() => dj.pitchBendRelease(deckId), [deckId])
 
   const remaining = deckState.duration - deckState.position
 
   const handleDrop = useCallback((e) => {
     e.preventDefault()
-    const trackIndex = e.dataTransfer.getData('text/plain')
+    const trackIndex = e.dataTransfer.getData('text/track-index')
     if (trackIndex) {
+      const dj = getDJController()
       const track = useAppStore.getState().library[parseInt(trackIndex, 10)]
       if (track) dj.loadTrack(deckId, track)
     }
-  }, [deckId, dj])
+  }, [deckId])
 
   return (
-    <div 
-      className={deckClass}
+    <div
+      className={`deck deck--${deckId.toLowerCase()}`}
       onDragOver={(e) => e.preventDefault()}
       onDrop={handleDrop}
     >
@@ -86,126 +183,8 @@ export function DeckPanel({ deckId }) {
         <span>─{fmt(remaining)}</span>
       </div>
 
-      {/* Control buttons */}
-      <div className="deck__controls">
-        {/* Row 1: Play, Pause, Cue, Sync */}
-        <button
-          id={`btn-play-${deckId}`}
-          className={`btn btn--play ${deckState.isPlaying ? (isA ? 'playing' : 'playing--b') : ''}`}
-          onClick={onPlay}
-          title="PLAY / STUTTER"
-        >
-          <span className="btn__icon">{deckState.isPlaying ? '▶▶' : '▶'}</span>
-          <span>PLAY</span>
-        </button>
-
-        <button
-          id={`btn-pause-${deckId}`}
-          className={`btn ${!deckState.isPlaying && deckState.track ? (isA ? 'active' : 'active--b') : ''}`}
-          onClick={onPause}
-          title="PAUSE (sets cue point)"
-        >
-          <span className="btn__icon">⏸</span>
-          <span>PAUSE</span>
-        </button>
-
-        <button
-          id={`btn-cue-${deckId}`}
-          className="btn btn--cue"
-          onMouseDown={onCueDown}
-          onMouseUp={onCueUp}
-          title="CUE – hold to preview, release to snap back"
-        >
-          <span className="btn__icon">◈</span>
-          <span>CUE</span>
-        </button>
-
-        <button
-          id={`btn-sync-${deckId}`}
-          className="btn btn--sync"
-          onClick={onSync}
-          title="SYNC – match BPM to opposite deck"
-        >
-          <span className="btn__icon">⟳</span>
-          <span>SYNC</span>
-        </button>
-
-        {/* Row 2: Pitch -%, Pitch +%, Rev, Load */}
-        <button
-          id={`btn-pitch-minus-${deckId}`}
-          className="btn btn--pitch"
-          onMouseDown={onPitchDown}
-          onMouseUp={onPitchRelease}
-          onMouseLeave={onPitchRelease}
-          title="PITCH – slow down (hold)"
-        >
-          <span className="btn__icon">▼</span>
-          <span>-%</span>
-        </button>
-
-        <button
-          id={`btn-pitch-plus-${deckId}`}
-          className="btn btn--pitch"
-          onMouseDown={onPitchUp}
-          onMouseUp={onPitchRelease}
-          onMouseLeave={onPitchRelease}
-          title="PITCH + speed up (hold)"
-        >
-          <span className="btn__icon">▲</span>
-          <span>+%</span>
-        </button>
-
-        <button
-          id={`btn-rev-${deckId}`}
-          className={`btn btn--rev ${deckState.isReversed ? 'active' : ''}`}
-          onClick={onRev}
-          title="REV – reverse playback"
-        >
-          <span className="btn__icon">◀</span>
-          <span>REV</span>
-        </button>
-
-        <button
-          id={`btn-load-${deckId}`}
-          className="btn"
-          onClick={() => dj._loadSelectedToDeck(deckId)}
-          title={`LOAD – load selected track to Deck ${deckId}`}
-        >
-          <span className="btn__icon">⬆</span>
-          <span>LOAD</span>
-        </button>
-      </div>
-
-      {/* EQ + Volume knobs */}
-      <div className="deck__knobs">
-        <div className="knob-wrap">
-          <label>Treble</label>
-          <input
-            type="range" min="0" max="1" step="0.01"
-            value={deckState.treble ?? 0.5}
-            onChange={e => dj.setTreble(deckId, parseFloat(e.target.value))}
-          />
-          <span className="knob-val">{dBDisplay(deckState.treble)}</span>
-        </div>
-        <div className="knob-wrap">
-          <label>Bass</label>
-          <input
-            type="range" min="0" max="1" step="0.01"
-            value={deckState.bass ?? 0.5}
-            onChange={e => dj.setBass(deckId, parseFloat(e.target.value))}
-          />
-          <span className="knob-val">{dBDisplay(deckState.bass)}</span>
-        </div>
-        <div className="knob-wrap">
-          <label>Volume</label>
-          <input
-            type="range" min="0" max="1" step="0.01"
-            value={deckState.volume ?? 0.8}
-            onChange={e => dj.setVolume(deckId, parseFloat(e.target.value))}
-          />
-          <span className="knob-val">{Math.round((deckState.volume ?? 0.8) * 100)}%</span>
-        </div>
-      </div>
+      {/* Queue */}
+      <QueuePanel deckId={deckId} />
     </div>
   )
 }

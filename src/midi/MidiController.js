@@ -97,6 +97,12 @@ export class MidiController {
   get deviceNames() {
     return this._getInputNames()
   }
+
+  send(msg) {
+    if (this._connected && window.electronAPI?.midiSend) {
+      window.electronAPI.midiSend(msg)
+    }
+  }
 }
 
 // ─── MIDI Mapper ───────────────────────────────────────────────────────────────
@@ -165,13 +171,17 @@ export class MidiMapper {
 // ─── Default ION Discovery DJ action names ────────────────────────────────────
 export const ION_ACTIONS = [
   // Deck A
-  'play_A', 'pause_A', 'cue_A', 'sync_A', 'rev_A',
-  'pitch_minus_A', 'pitch_plus_A', 'load_A',
+  'play_pause_A',
+  // 'play_A', 'pause_A', // Older separated versions
+  'cue_A', 'sync_A', 'rev_A',
+  'pitch_minus_A', 'pitch_plus_A', 'pitch_slider_A', 'load_A',
   'jog_A', 'jog_touch_A',
   'treble_A', 'bass_A', 'volume_A',
   // Deck B
-  'play_B', 'pause_B', 'cue_B', 'sync_B', 'rev_B',
-  'pitch_minus_B', 'pitch_plus_B', 'load_B',
+  'play_pause_B',
+  // 'play_B', 'pause_B', // Older separated versions
+  'cue_B', 'sync_B', 'rev_B',
+  'pitch_minus_B', 'pitch_plus_B', 'pitch_slider_B', 'load_B',
   'jog_B', 'jog_touch_B',
   'treble_B', 'bass_B', 'volume_B',
   // Center

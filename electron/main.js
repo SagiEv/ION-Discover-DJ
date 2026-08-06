@@ -11,6 +11,8 @@ const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged
 
 function createWindow() {
   const win = new BrowserWindow({
+    title: 'DiscoverTube DJ',
+    icon: path.join(__dirname, '../icon.png'),
     width: 1400,
     height: 820,
     minWidth: 1200,
@@ -32,7 +34,6 @@ function createWindow() {
 
   if (isDev) {
     win.loadURL('http://localhost:5173')
-    win.webContents.openDevTools({ mode: 'detach' })
   } else {
     win.loadFile(path.join(__dirname, '../dist/renderer/index.html'))
   }
@@ -118,6 +119,19 @@ ipcMain.handle('save-midi-mapping', (_, mapping) => {
 })
 
 // ─── IPC: YouTube Search & Download ─────────────────────────────────────────
+ipcMain.handle('search-youtube-suggestions', async (_, query) => {
+  if (!query) return []
+  try {
+    const url = `http://suggestqueries.google.com/complete/search?client=youtube&ds=yt&client=firefox&q=${encodeURIComponent(query)}`
+    const response = await fetch(url)
+    const data = await response.json()
+    // data is typically ["query", ["suggestion1", "suggestion2", ...]]
+    return data[1] || []
+  } catch (error) {
+    console.error('Failed to fetch YouTube suggestions:', error)
+    return []
+  }
+})
 ipcMain.handle('search-youtube', async (_, query) => {
   try {
     const r = await ytSearch(query)
@@ -135,7 +149,7 @@ ipcMain.handle('search-youtube', async (_, query) => {
       fs.mkdirSync(songsDir, { recursive: true })
     }
 
-    const tempFilePath = path.join(songsDir, `${videoId}.webm`)
+    const tempFilePath = path.join(songsDir, `${title}.webm`)
 
     // If file already exists, just return it
     if (fs.existsSync(tempFilePath)) {
@@ -162,11 +176,35 @@ ipcMain.handle('search-youtube', async (_, query) => {
   }
 })
 
+// ─── IPC: Load Default Library ──────────────────────────────────────────────
+ipcMain.handle('load-default-library', async () => {
+  const songsDir = path.join(__dirname, '../songs')
+  if (!fs.existsSync(songsDir)) return []
+  
+  const exts = new Set(['.mp3', '.flac', '.wav', '.ogg', '.aac', '.m4a', '.webm'])
+  const results = []
+
+  try {
+    const entries = fs.readdirSync(songsDir, { withFileTypes: true })
+    for (const entry of entries) {
+      if (!entry.isDirectory() && exts.has(path.extname(entry.name).toLowerCase())) {
+        results.push(path.join(songsDir, entry.name))
+      }
+    }
+  } catch (e) {
+    console.error('Error reading default library:', e)
+  }
+
+  return results
+})
+
 // ─── IPC: MIDI via easymidi (Node.js direct) ────────────────────────────────
 let midiInput = null
+let midiOutput = null
 
 ipcMain.handle('midi-connect', (event) => {
   const inputs = easymidi.getInputs()
+  const outputs = easymidi.getOutputs()
   if (inputs.length === 0) {
     return [] // No MIDI devices found
   }
@@ -176,12 +214,20 @@ ipcMain.handle('midi-connect', (event) => {
     midiInput.close()
     midiInput = null
   }
+  if (midiOutput) {
+    midiOutput.close()
+    midiOutput = null
+  }
 
   // Find the ION Discover DJ, or just use the first available MIDI device
   const targetName = inputs.find(n => n.toLowerCase().includes('ion')) || inputs[0]
+  const targetOutName = outputs.find(n => n.toLowerCase().includes('ion')) || outputs[0]
   
   try {
     midiInput = new easymidi.Input(targetName)
+    if (targetOutName) {
+      midiOutput = new easymidi.Output(targetOutName)
+    }
     console.log('[MIDI] Connected to Node.js backend:', targetName)
     
     const win = BrowserWindow.fromWebContents(event.sender)
@@ -220,5 +266,20 @@ ipcMain.handle('midi-connect', (event) => {
   } catch (err) {
     console.error('[MIDI] Error opening device:', err)
     return []
+  }
+})
+
+ipcMain.handle('midi-send', (_, msg) => {
+  if (!midiOutput) return
+  try {
+    if (msg.type === 'noteon' || msg.type === 'noteoff') {
+      midiOutput.send(msg.type, {
+        channel: msg.channel,
+        note: msg.note,
+        velocity: msg.velocity || 127
+      })
+    }
+  } catch(e) {
+    console.error('[MIDI] Send error:', e)
   }
 })

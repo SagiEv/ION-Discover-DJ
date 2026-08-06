@@ -11,6 +11,9 @@ class DJController {
     this.engine = null
     this._cueing = { A: false, B: false }        // CUE button held state
     this._playPressedWhileCue = { A: false, B: false }
+    this._jogTouched = { A: false, B: false }    // Jog wheel touch state
+    this._scratchBaseRev = { A: false, B: false } // Track base REV state during scratch
+    this._jogTimer = { A: null, B: null }        // Wheel stop detection
   }
 
   init() {
@@ -22,12 +25,14 @@ class DJController {
     for (const id of ['A', 'B']) {
       const deck = id === 'A' ? this.engine.deckA : this.engine.deckB
 
-      deck.onPositionUpdate = (deckId, position, duration) => {
-        useAppStore.getState().updateDeck(deckId, { position, duration })
+      deck.onPositionUpdate = (deckId, position, duration, visualAngle) => {
+        useAppStore.getState().updateDeck(deckId, { position, duration, visualAngle })
       }
 
       deck.onEnded = (deckId) => {
         useAppStore.getState().updateDeck(deckId, { isPlaying: false })
+        // Auto-advance: load next track from queue
+        this._playNextInQueue(deckId)
       }
     }
   }
@@ -74,6 +79,17 @@ class DJController {
     useAppStore.getState().updateDeck(deckId, { isPlaying: true })
   }
 
+  // ─── Play / Pause Toggle ───────────────────────────────────────────────────
+  togglePlay(deckId) {
+    const deck = this._deck(deckId)
+    if (!deck.originalBuffer) return
+    if (deck.isPlaying) {
+      this.pause(deckId)
+    } else {
+      this.playStutter(deckId)
+    }
+  }
+
   // ─── Pause (sets cue point) ────────────────────────────────────────────────
   pause(deckId) {
     const deck = this._deck(deckId)
@@ -114,6 +130,9 @@ class DJController {
   // ─── SYNC ─────────────────────────────────────────────────────────────────
   sync(deckId) {
     this.engine.sync(deckId)
+    const store = useAppStore.getState()
+    const deckState = deckId === 'A' ? store.deckA : store.deckB
+    store.updateDeck(deckId, { isSyncEnabled: !deckState.isSyncEnabled })
   }
 
   // ─── REV ──────────────────────────────────────────────────────────────────
@@ -133,37 +152,113 @@ class DJController {
     useAppStore.getState().toggleScratchMode()
   }
 
+  // ─── Pitch Slider ─────────────────────────────────────────────────────────
+  setPitchSlider(deckId, normalized) {
+    // Pitch slider range: typically -8% to +8%
+    // 0.0 = -8% (0.92x), 0.5 = 0% (1.0x), 1.0 = +8% (1.08x)
+    const rate = 1.0 + (normalized - 0.5) * 0.16
+    this._deck(deckId).setPitchRate(rate)
+  }
+
   // ─── Jog wheel input ──────────────────────────────────────────────────────
   // midiValue: 0-127 relative (64 = center/stopped)
   onJogWheel(deckId, midiValue) {
-    const deck = this._deck(deckId)
     const store = useAppStore.getState()
-    const delta = midiValue > 64 ? midiValue - 64 : midiValue - 64 // -63 to +63
+    const deck = this._deck(deckId)
+    
+    // Standard relative MIDI: < 64 is forward ticks, > 64 is backward ticks (two's complement)
+    // Sometimes 1, 2, 3 forward, 127, 126 backward.
+    let delta = midiValue > 64 ? midiValue - 128 : midiValue
+    
+    // TEMPORARY LOGGING FOR HARDWARE TESTING
+    console.log(`[JOG TEST ${deckId}] Raw: ${midiValue} | True Delta: ${delta}`);
 
-    if (store.scratchModeEnabled) {
-      // Scratch mode: manipulate playback rate
-      const rate = 1.0 + (delta / 15)  // sensitivity tuning
+    // Update physical wheel visual angle
+    // Assuming 400 ticks per revolution. 360 / 400 = 0.9 degrees per tick
+    const degrees = delta * 0.9
+    deck.visualAngle = (deck.visualAngle + degrees) % 360
+    if (deck.onPositionUpdate) {
+      deck.onPositionUpdate(deck.id, deck.getCurrentPosition(), deck.duration, deck.visualAngle)
+    }
+
+    if (this._jogTimer[deckId]) {
+      clearTimeout(this._jogTimer[deckId])
+    } else {
+      // First movement! Save real direction in case they aren't using the touch sensor
+      this._scratchBaseRev[deckId] = deck.isReversed
+    }
+
+    const isScratching = store.scratchModeEnabled;
+
+    // Reset rate when the wheel stops moving
+    this._jogTimer[deckId] = setTimeout(() => {
+      this._jogTimer[deckId] = null
+      if (this._jogTouched[deckId] && isScratching) {
+        if (deck.isPlaying) deck.setScratchRate(0.0) // Held record stops
+      } else {
+        // Safety reset if touch release was missed or if not using touch sensor
+        const baseRev = this._scratchBaseRev[deckId] || false;
+        if (deck.isReversed !== baseRev) deck.toggleReverse();
+        deck.releaseScratch() // Return to normal playback speed
+      }
+    }, 150)
+
+    if (!isScratching) {
+      // Search mode: pitch bend when playing, seek when paused
       if (deck.isPlaying) {
-        deck.setScratchRate(Math.max(-2, Math.min(3, rate)))
+        // More sensitive pitch bend for delta = 1 or 2
+        const rate = 1.0 + (delta * 0.03)
+        deck.setScratchRate(Math.max(0.5, Math.min(2, rate)))
+      } else {
+        const seekDelta = delta * 0.05
+        deck.seekTo(deck.getCurrentPosition() + seekDelta)
+      }
+    } else {
+      // Scratch mode (Works instantly on wheel move, no touch required)
+      if (deck.isPlaying) {
+        // True scratch: speed is absolute movement
+        const speed = Math.abs(delta) * 0.8; 
+        
+        const isMovingForward = delta > 0;
+        const baseRev = this._scratchBaseRev[deckId] || false;
+        const desiredRev = isMovingForward ? baseRev : !baseRev;
+
+        if (deck.isReversed !== desiredRev) {
+          deck.toggleReverse();
+        }
+        
+        deck.setScratchRate(Math.min(3, speed));
       } else {
         // Simulate scratch while paused: seek
         const nudge = delta * 0.01
         deck.seekTo(deck.getCurrentPosition() + nudge)
       }
-    } else {
-      // Search mode: seek when paused, pitch bend when playing
-      if (!deck.isPlaying) {
-        const seekDelta = delta * 0.05
-        deck.seekTo(deck.getCurrentPosition() + seekDelta)
-      } else {
-        const rate = 1.0 + (delta / 40)
-        deck.setScratchRate(Math.max(0.5, Math.min(2, rate)))
+    }
+  }
+
+  onJogTouch(deckId) {
+    this._jogTouched[deckId] = true
+    const deck = this._deck(deckId)
+    deck.isJogTouched = true
+    this._scratchBaseRev[deckId] = deck.isReversed // Save real direction
+    const store = useAppStore.getState()
+    if (store.scratchModeEnabled) {
+      const deck = this._deck(deckId)
+      if (deck.isPlaying) {
+        deck.setScratchRate(0.0) // Stop immediately but keep the state "playing"
       }
     }
   }
 
   onJogRelease(deckId) {
-    this._deck(deckId).releaseScratch()
+    this._jogTouched[deckId] = false
+    const deck = this._deck(deckId)
+    deck.isJogTouched = false
+    const baseRev = this._scratchBaseRev[deckId] || false;
+    if (deck.isReversed !== baseRev) {
+      deck.toggleReverse()
+    }
+    deck.releaseScratch()
   }
 
   // ─── EQ / Volume ──────────────────────────────────────────────────────────
@@ -208,8 +303,11 @@ class DJController {
 
     switch (action) {
       // Deck A buttons
-      case 'play_A':        if (isOn) this.playStutter('A'); break
-      case 'pause_A':       if (isOn) this.pause('A'); break
+      case 'play_pause_A':  if (isOn) this.togglePlay('A'); break
+      // case 'play_A':        if (isOn) this.playStutter('A'); break
+      // case 'pause_A':       if (isOn) this.pause('A'); break
+      case 'play_A':        if (isOn) this.playStutter('A'); break // Kept for older configs
+      case 'pause_A':       if (isOn) this.pause('A'); break // Kept for older configs
       case 'cue_A':
         if (isOn) this.cueDown('A')
         if (isOff) this.cueUp('A')
@@ -229,17 +327,22 @@ class DJController {
         break
       case 'jog_A':         this.onJogWheel('A', rawVal); break
       case 'jog_touch_A':
+        if (isOn) this.onJogTouch('A')
         if (isOff) this.onJogRelease('A')
         break
 
       // Deck A knobs (CC)
+      case 'pitch_slider_A': this.setPitchSlider('A', val); break
       case 'treble_A':      this.setTreble('A', val); break
       case 'bass_A':        this.setBass('A', val); break
       case 'volume_A':      this.setVolume('A', val); break
 
       // Deck B buttons
-      case 'play_B':        if (isOn) this.playStutter('B'); break
-      case 'pause_B':       if (isOn) this.pause('B'); break
+      case 'play_pause_B':  if (isOn) this.togglePlay('B'); break
+      // case 'play_B':        if (isOn) this.playStutter('B'); break
+      // case 'pause_B':       if (isOn) this.pause('B'); break
+      case 'play_B':        if (isOn) this.playStutter('B'); break // Kept for older configs
+      case 'pause_B':       if (isOn) this.pause('B'); break // Kept for older configs
       case 'cue_B':
         if (isOn) this.cueDown('B')
         if (isOff) this.cueUp('B')
@@ -259,16 +362,18 @@ class DJController {
         break
       case 'jog_B':         this.onJogWheel('B', rawVal); break
       case 'jog_touch_B':
+        if (isOn) this.onJogTouch('B')
         if (isOff) this.onJogRelease('B')
         break
 
       // Deck B knobs
+      case 'pitch_slider_B': this.setPitchSlider('B', val); break
       case 'treble_B':      this.setTreble('B', val); break
       case 'bass_B':        this.setBass('B', val); break
       case 'volume_B':      this.setVolume('B', val); break
 
       // Center controls
-      case 'crossfader':    this.setCrossfader(val); break
+      case 'crossfader':    this.setCrossfader(1.0 - val); break
       case 'master_volume': this.setMasterVolume(val); break
       case 'browse_turn':
         // Relative CC: >64 = clockwise, <64 = counter-clockwise
@@ -291,6 +396,20 @@ class DJController {
 
   _deck(id) {
     return id === 'A' ? this.engine.deckA : this.engine.deckB
+  }
+
+  async _playNextInQueue(deckId) {
+    const store = useAppStore.getState()
+    const key = deckId === 'A' ? 'deckA' : 'deckB'
+    const queue = store[key].queue
+    if (queue.length === 0) return
+
+    const nextTrack = queue[0]
+    // Remove from queue
+    store.removeFromQueue(deckId, 0)
+    // Load and play
+    await this.loadTrack(deckId, nextTrack)
+    this.playStutter(deckId)
   }
 }
 

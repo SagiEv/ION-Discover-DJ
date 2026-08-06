@@ -4,26 +4,30 @@ import { MidiController, MidiMapper, ION_ACTIONS } from '../midi/MidiController.
 import { getDJController } from '../engine/DJController.js'
 
 const ACTION_LABELS = {
-  play_A: 'PLAY/STUTTER – Deck A',
-  pause_A: 'PAUSE – Deck A',
+  play_pause_A: 'PLAY/PAUSE – Deck A',
+  // play_A: 'PLAY/STUTTER – Deck A',
+  // pause_A: 'PAUSE – Deck A',
   cue_A: 'CUE – Deck A',
   sync_A: 'SYNC – Deck A',
   rev_A: 'REV – Deck A',
   pitch_minus_A: 'PITCH –% – Deck A',
   pitch_plus_A: 'PITCH +% – Deck A',
+  pitch_slider_A: 'PITCH SLIDER – Deck A',
   load_A: 'LOAD – Deck A',
   jog_A: 'JOG WHEEL – Deck A',
   jog_touch_A: 'JOG TOUCH – Deck A',
   treble_A: 'TREBLE knob – Deck A',
   bass_A: 'BASS knob – Deck A',
   volume_A: 'VOLUME knob – Deck A',
-  play_B: 'PLAY/STUTTER – Deck B',
-  pause_B: 'PAUSE – Deck B',
+  play_pause_B: 'PLAY/PAUSE – Deck B',
+  // play_B: 'PLAY/STUTTER – Deck B',
+  // pause_B: 'PAUSE – Deck B',
   cue_B: 'CUE – Deck B',
   sync_B: 'SYNC – Deck B',
   rev_B: 'REV – Deck B',
   pitch_minus_B: 'PITCH –% – Deck B',
   pitch_plus_B: 'PITCH +% – Deck B',
+  pitch_slider_B: 'PITCH SLIDER – Deck B',
   load_B: 'LOAD – Deck B',
   jog_B: 'JOG WHEEL – Deck B',
   jog_touch_B: 'JOG TOUCH – Deck B',
@@ -48,7 +52,14 @@ let midiCtrl = null
 let midiMapper = null
 
 export function useMidi() {
-  const store = useAppStore.getState()
+  const deckA_isPlaying = useAppStore(s => s.deckA.isPlaying)
+  const deckA_isReversed = useAppStore(s => s.deckA.isReversed)
+  const deckA_isSyncEnabled = useAppStore(s => s.deckA.isSyncEnabled)
+  const deckB_isPlaying = useAppStore(s => s.deckB.isPlaying)
+  const deckB_isReversed = useAppStore(s => s.deckB.isReversed)
+  const deckB_isSyncEnabled = useAppStore(s => s.deckB.isSyncEnabled)
+  const scratchModeEnabled = useAppStore(s => s.scratchModeEnabled)
+  const midiConnected = useAppStore(s => s.midiConnected)
 
   useEffect(() => {
     if (midiCtrl) return
@@ -60,6 +71,11 @@ export function useMidi() {
       try {
         const devices = await midiCtrl.connect()
         useAppStore.getState().setMidiConnected(true, devices)
+
+        // Reset all LEDs to off initially
+        for (let note = 0; note <= 127; note++) {
+          midiCtrl.send({ type: 'noteoff', channel: 0, note })
+        }
 
         // Load saved mapping
         const saved = await window.electronAPI?.loadMidiMapping()
@@ -103,6 +119,43 @@ export function useMidi() {
 
     init()
   }, [])
+
+  // ─── LED Feedback ────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!midiCtrl || !midiMapper || !midiCtrl.isConnected) return
+
+    const sendLed = (action, isOn) => {
+      const def = midiMapper.mapping[action]
+      if (def && (def.type === 'noteon' || def.type === 'noteoff')) {
+        midiCtrl.send({
+          type: isOn ? 'noteon' : 'noteoff',
+          channel: def.channel,
+          note: def.note,
+          velocity: isOn ? 127 : 0
+        })
+      }
+    }
+
+    sendLed('play_pause_A', deckA_isPlaying)
+    sendLed('play_A', deckA_isPlaying) // in case they use old mapping
+    sendLed('rev_A', deckA_isReversed)
+    sendLed('cue_A', !deckA_isPlaying) // Cue illuminated when ready/paused
+    sendLed('sync_A', deckA_isSyncEnabled) 
+
+    sendLed('play_pause_B', deckB_isPlaying)
+    sendLed('play_B', deckB_isPlaying) // old mapping
+    sendLed('rev_B', deckB_isReversed)
+    sendLed('cue_B', !deckB_isPlaying)
+    sendLed('sync_B', deckB_isSyncEnabled)
+
+    sendLed('scratch_toggle', scratchModeEnabled)
+
+  }, [
+    deckA_isPlaying, deckA_isReversed, deckA_isSyncEnabled,
+    deckB_isPlaying, deckB_isReversed, deckB_isSyncEnabled,
+    scratchModeEnabled,
+    midiConnected, // re-run if re-connected
+  ])
 
   return { midiCtrl, midiMapper }
 }

@@ -1,5 +1,5 @@
 {
-  "name": "spotifydj",
+  "name": "discovertubedj",
   "version": "1.0.0",
   "description": "ION Discovery DJ × Spotify — local file DJ app",
   "main": "electron/main.js",

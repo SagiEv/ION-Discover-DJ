@@ -30,8 +30,11 @@ export class Deck {
     this.cuePoint = 0        // in seconds
     this.duration = 0
 
-    // BPM tracking
     this.bpm = 0
+
+    this.visualAngle = 0 // Tracks physical rotation for UI jog wheel
+    this.isJogTouched = false // Freezes visual rotation when physical wheel is held
+    this.pitchRate = 1.0
 
     // Callbacks set by AudioEngine
     this.onEnded = null
@@ -126,9 +129,8 @@ export class Deck {
       : (this.isReversed ? this.duration - this._pauseOffset : this._pauseOffset)
 
     const src = this._createSource(buf)
-    src.playbackRate.value = 1.0
-    this._startOffset = this.isReversed ? this.duration - startFrom : startFrom
-    if (this.isReversed) this._startOffset = startFrom // offset into reversed buffer
+    src.playbackRate.value = this.pitchRate
+    this._startOffset = startFrom // offset into the buffer currently being played
 
     src.start(0, Math.max(0, startFrom))
     this._startTime = this.ctx.currentTime
@@ -166,7 +168,6 @@ export class Deck {
     this.play(pos)
   }
 
-  // ─── Seek to position (seconds) ─────────────────────────────────────────────
   seekTo(seconds) {
     const wasPlaying = this.isPlaying
     const pos = Math.max(0, Math.min(seconds, this.duration))
@@ -174,6 +175,11 @@ export class Deck {
       try { this.sourceNode?.stop() } catch {}
     }
     this._pauseOffset = pos
+    
+    if (this.onPositionUpdate) {
+      this.onPositionUpdate(this.id, this.getCurrentPosition(), this.duration, this.visualAngle)
+    }
+
     if (wasPlaying) this.play(pos)
   }
 
@@ -222,19 +228,26 @@ export class Deck {
 
   releaseScratch() {
     if (!this.sourceNode) return
-    this.sourceNode.playbackRate.setTargetAtTime(1.0, this.ctx.currentTime, 0.05)
+    this.sourceNode.playbackRate.setTargetAtTime(this.pitchRate, this.ctx.currentTime, 0.05)
   }
 
   // ─── Pitch bend (momentary) ──────────────────────────────────────────────────
   setPitchBend(factor) {
     // factor: 1.05 for +%, 0.95 for -%
     if (!this.sourceNode) return
-    this.sourceNode.playbackRate.setTargetAtTime(factor, this.ctx.currentTime, 0.02)
+    this.sourceNode.playbackRate.setTargetAtTime(this.pitchRate * factor, this.ctx.currentTime, 0.02)
   }
 
   releasePitchBend() {
     if (!this.sourceNode) return
-    this.sourceNode.playbackRate.setTargetAtTime(1.0, this.ctx.currentTime, 0.05)
+    this.sourceNode.playbackRate.setTargetAtTime(this.pitchRate, this.ctx.currentTime, 0.05)
+  }
+
+  // ─── Pitch slider (continuous) ───────────────────────────────────────────────
+  setPitchRate(rate) {
+    this.pitchRate = rate
+    if (!this.sourceNode) return
+    this.sourceNode.playbackRate.setTargetAtTime(rate, this.ctx.currentTime, 0.05)
   }
 
   // ─── Sync: set playback rate to match a target BPM ──────────────────────────
@@ -263,9 +276,17 @@ export class Deck {
   // ─── Position tracking ───────────────────────────────────────────────────────
   getCurrentPosition() {
     if (!this.isPlaying) return this._pauseOffset
-    const elapsed = this.ctx.currentTime - this._startTime
-    const pos = this._startOffset + elapsed
-    return Math.min(pos, this.duration)
+    
+    // Scale elapsed time by pitchRate to accurately reflect position changes
+    const elapsed = (this.ctx.currentTime - this._startTime) * this.pitchRate
+    const posInCurrentBuffer = this._startOffset + Math.max(0, elapsed)
+    
+    // Normalize to original track time
+    if (this.isReversed) {
+      return Math.max(0, this.duration - posInCurrentBuffer)
+    } else {
+      return Math.min(posInCurrentBuffer, this.duration)
+    }
   }
 
   getProgress() {
@@ -276,8 +297,15 @@ export class Deck {
   _startPositionTimer() {
     this._stopPositionTimer()
     this._positionTimer = setInterval(() => {
+      if (this.isPlaying && !this.isJogTouched) {
+        // Increment visual angle during normal playback (33.3 RPM = 200 degrees/sec)
+        const deltaSec = 0.05 * this.pitchRate
+        const degrees = deltaSec * 200
+        this.visualAngle = (this.visualAngle + (this.isReversed ? -degrees : degrees)) % 360
+      }
+
       if (this.onPositionUpdate) {
-        this.onPositionUpdate(this.id, this.getCurrentPosition(), this.duration)
+        this.onPositionUpdate(this.id, this.getCurrentPosition(), this.duration, this.visualAngle)
       }
     }, 50) // 20fps position updates
   }

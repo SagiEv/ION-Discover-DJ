@@ -1,0 +1,167 @@
+{
+  "play_A": {
+    "type": "noteon",
+    "channel": 0,
+    "note": 74
+  },
+  "pause_A": {
+    "type": "noteon",
+    "channel": 0,
+    "note": 74
+  },
+  "jog_A": {
+    "type": "cc",
+    "channel": 0,
+    "cc": 25
+  },
+  "jog_touch_A": {
+    "type": "noteon",
+    "channel": 0,
+    "note": 77
+  },
+  "crossfader": {
+    "type": "cc",
+    "channel": 0,
+    "cc": 10
+  },
+  "cue_A": {
+    "type": "noteon",
+    "channel": 0,
+    "note": 59
+  },
+  "sync_A": {
+    "type": "noteon",
+    "channel": 0,
+    "note": 64
+  },
+  "rev_A": {
+    "type": "noteon",
+    "channel": 0,
+    "note": 51
+  },
+  "pitch_minus_A": {
+    "type": "noteon",
+    "channel": 0,
+    "note": 67
+  },
+  "pitch_plus_A": {
+    "type": "noteon",
+    "channel": 0,
+    "note": 68
+  },
+  "load_A": {
+    "type": "noteon",
+    "channel": 0,
+    "note": 75
+  },
+  "treble_A": {
+    "type": "cc",
+    "channel": 0,
+    "cc": 16
+  },
+  "bass_A": {
+    "type": "cc",
+    "channel": 0,
+    "cc": 20
+  },
+  "volume_A": {
+    "type": "cc",
+    "channel": 0,
+    "cc": 8
+  },
+  "play_B": {
+    "type": "noteon",
+    "channel": 0,
+    "note": 76
+  },
+  "pause_B": {
+    "type": "noteon",
+    "channel": 0,
+    "note": 76
+  },
+  "cue_B": {
+    "type": "noteon",
+    "channel": 0,
+    "note": 66
+  },
+  "sync_B": {
+    "type": "noteon",
+    "channel": 0,
+    "note": 71
+  },
+  "rev_B": {
+    "type": "noteon",
+    "channel": 0,
+    "note": 60
+  },
+  "pitch_minus_B": {
+    "type": "noteon",
+    "channel": 0,
+    "note": 69
+  },
+  "pitch_plus_B": {
+    "type": "noteon",
+    "channel": 0,
+    "note": 70
+  },
+  "load_B": {
+    "type": "noteon",
+    "channel": 0,
+    "note": 52
+  },
+  "jog_B": {
+    "type": "cc",
+    "channel": 0,
+    "cc": 24
+  },
+  "jog_touch_B": {
+    "type": "cc",
+    "channel": 0,
+    "cc": 25
+  },
+  "treble_B": {
+    "type": "cc",
+    "channel": 0,
+    "cc": 17
+  },
+  "bass_B": {
+    "type": "cc",
+    "channel": 0,
+    "cc": 21
+  },
+  "volume_B": {
+    "type": "cc",
+    "channel": 0,
+    "cc": 9
+  },
+  "master_volume": {
+    "type": "cc",
+    "channel": 0,
+    "cc": 23
+  },
+  "browse_turn": {
+    "type": "cc",
+    "channel": 0,
+    "cc": 26
+  },
+  "browse_press": {
+    "type": "noteon",
+    "channel": 0,
+    "note": 79
+  },
+  "scratch_toggle": {
+    "type": "noteon",
+    "channel": 0,
+    "note": 72
+  },
+  "play_pause_A": {
+    "type": "noteon",
+    "channel": 0,
+    "note": 74
+  },
+  "play_pause_B": {
+    "type": "noteon",
+    "channel": 0,
+    "note": 76
+  }
+}

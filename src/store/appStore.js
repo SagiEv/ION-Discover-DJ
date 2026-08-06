@@ -6,13 +6,16 @@ const makeDeckState = () => ({
   isPlaying: false,
   isReversed: false,
   isScratchMode: false,
+  isSyncEnabled: false,
   position: 0,          // seconds
+  visualAngle: 0,       // physical jog angle
   duration: 0,
   cuePoint: 0,
   volume: 0.8,
   treble: 0.5,          // 0-1, 0.5 = 0dB
   bass: 0.5,
   bpm: 0,
+  queue: [],            // [{ name, path, duration, bpm }]
 })
 
 export const useAppStore = create((set, get) => ({
@@ -23,6 +26,44 @@ export const useAppStore = create((set, get) => ({
   updateDeck: (id, patch) => {
     const key = id === 'A' ? 'deckA' : 'deckB'
     set(state => ({ [key]: { ...state[key], ...patch } }))
+  },
+
+  // ─── Queue Management ──────────────────────────────────────────────────────
+  addToQueue: (deckId, track) => {
+    const key = deckId === 'A' ? 'deckA' : 'deckB'
+    set(state => ({
+      [key]: {
+        ...state[key],
+        queue: [...state[key].queue, track],
+      }
+    }))
+  },
+
+  removeFromQueue: (deckId, index) => {
+    const key = deckId === 'A' ? 'deckA' : 'deckB'
+    set(state => ({
+      [key]: {
+        ...state[key],
+        queue: state[key].queue.filter((_, i) => i !== index),
+      }
+    }))
+  },
+
+  reorderQueue: (deckId, fromIndex, toIndex) => {
+    const key = deckId === 'A' ? 'deckA' : 'deckB'
+    set(state => {
+      const queue = [...state[key].queue]
+      const [moved] = queue.splice(fromIndex, 1)
+      queue.splice(toIndex, 0, moved)
+      return { [key]: { ...state[key], queue } }
+    })
+  },
+
+  clearQueue: (deckId) => {
+    const key = deckId === 'A' ? 'deckA' : 'deckB'
+    set(state => ({
+      [key]: { ...state[key], queue: [] }
+    }))
   },
 
   // ─── Mixer ──────────────────────────────────────────────────────────────────
