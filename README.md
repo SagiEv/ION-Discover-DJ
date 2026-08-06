@@ -1,15 +1,26 @@
-# DiscoverTube DJ
-<img src="icon.png" width="128" alt="DiscoverTube DJ Icon" />
-
-![Electron](https://img.shields.io/badge/Electron-191970?style=for-the-badge&logo=Electron&logoColor=white)
-![React](https://img.shields.io/badge/React-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)
-![Vite](https://img.shields.io/badge/Vite-B73BFE?style=for-the-badge&logo=vite&logoColor=FFD62E)
-![Node.js](https://img.shields.io/badge/Node.js-43853D?style=for-the-badge&logo=node.js&logoColor=white)
+<div align="center">
+  <img src="icon.png" width="128" alt="DiscoverTube DJ Icon" />
+  <h1>DiscoverTube DJ</h1>
+  <p>
+    <img src="https://img.shields.io/badge/Electron-191970?style=for-the-badge&logo=Electron&logoColor=white" alt="Electron" />
+    <img src="https://img.shields.io/badge/React-20232A?style=for-the-badge&logo=react&logoColor=61DAFB" alt="React" />
+    <img src="https://img.shields.io/badge/Vite-B73BFE?style=for-the-badge&logo=vite&logoColor=FFD62E" alt="Vite" />
+    <img src="https://img.shields.io/badge/Node.js-43853D?style=for-the-badge&logo=node.js&logoColor=white" alt="Node.js" />
+  </p>
+</div>
 
 DiscoverTube DJ is a powerful, desktop-based DJ application built with Electron, React, and Vite. It bridges the gap between hardware MIDI controllers (like the ION Discover DJ) and digital mixing, offering a seamless interface for local audio file playback and on-the-fly music searching and downloading from YouTube.
 
-![Screenshot](screenshot.png)
-![ION Discover DJ Hardware](ION_DISCOVER_DJ.png)
+<div align="center">
+  <h3>Screenshot</h3>
+  <img src="screenshot.png" alt="Screenshot" style="max-width: 100%;" />
+</div>
+
+<div align="center">
+  <h3>Compatible with</h3>
+  <img src="ION_DISCOVER_DJ.png" width="400" alt="ION Discover DJ Hardware" />
+  <p><strong>ION Discover DJ</strong></p>
+</div>
 
 ## 🎛️ Features
 
@@ -88,5 +99,8 @@ One of the standout features of DiscoverTube DJ is its ability to instantly pull
 - **MIDI**: Web MIDI API
 - **Scraping/Downloading**: `yt-search`, `youtube-dl-exec` (`yt-dlp`)
 
+## ⚠️ Disclaimer
+> This is an independent, community-developed project for the ION Discover DJ. It is not affiliated with or endorsed by ION Audio.
+
 ## 📄 License
-This project is licensed under the ISC License.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
