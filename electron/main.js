@@ -12,7 +12,7 @@ const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged
 function createWindow() {
   const win = new BrowserWindow({
     title: 'DiscoverTube DJ',
-    icon: path.join(__dirname, '../icon.png'),
+    icon: path.join(__dirname, '../public/icon.png'),
     width: 1400,
     height: 820,
     minWidth: 1200,

@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="icon.png" width="128" alt="DiscoverTube DJ Icon" />
+  <img src="public/icon.png" width="128" alt="DiscoverTube DJ Icon" />
   <h1>DiscoverTube DJ</h1>
   <p>
     <img src="https://img.shields.io/badge/Electron-191970?style=for-the-badge&logo=Electron&logoColor=white" alt="Electron" />
@@ -13,12 +13,12 @@ DiscoverTube DJ is a powerful, desktop-based DJ application built with Electron,
 
 <div align="center">
   <h3>Screenshot</h3>
-  <img src="screenshot.png" alt="Screenshot" style="max-width: 100%;" />
+  <img src="public/screenshot.png" alt="Screenshot" style="max-width: 100%;" />
 </div>
 
 <div align="center">
   <h3>Compatible with</h3>
-  <img src="ION_DISCOVER_DJ.png" width="400" alt="ION Discover DJ Hardware" />
+  <img src="public/ION_DISCOVER_DJ.png" width="400" alt="ION Discover DJ Hardware" />
   <p><strong>ION Discover DJ</strong></p>
 </div>
 

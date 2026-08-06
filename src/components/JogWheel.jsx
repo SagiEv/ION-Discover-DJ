@@ -1,6 +1,7 @@
 import React, { useCallback, useRef } from 'react'
 import { useAppStore } from '../store/appStore.js'
-import iconUrl from '../../wheel.png'
+
+const iconUrl = '/wheel.png'
 
 /**
  * Interactive jog wheel component.
