@@ -1,6 +1,7 @@
 node_modules/
 .DS_Store
 dist/
+dist-app/
 dist-electron/
 release/
 *.log
@@ -15,6 +16,4 @@ release/
 *.sw?
 
 # Temporary large files
-1784240787125-player-script.js
-1784240787142-player-script.js
 songs/

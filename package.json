@@ -1,7 +1,7 @@
 {
   "name": "discovertubedj",
   "version": "1.0.0",
-  "description": "ION Discovery DJ × Spotify — local file DJ app",
+  "description": "ION Discovery DJ × Youtube — local file DJ app",
   "main": "electron/main.js",
   "scripts": {
     "dev": "concurrently \"npm run dev:renderer\" \"npm run dev:electron\"",
@@ -11,7 +11,7 @@
     "preview": "vite preview"
   },
   "keywords": [],
-  "author": "",
+  "author": "SagiEv",
   "license": "ISC",
   "devDependencies": {
     "@vitejs/plugin-react": "^4.5.1",
@@ -32,8 +32,8 @@
     "zustand": "^5.0.5"
   },
   "build": {
-    "appId": "com.spotifydj.app",
-    "productName": "SpotifyDJ",
+    "appId": "com.discovertubedj.app",
+    "productName": "DiscoverTube DJ",
     "directories": {
       "output": "dist-app"
     },
@@ -43,7 +43,7 @@
     ],
     "win": {
       "target": "nsis",
-      "icon": "assets/icon.ico"
+      "icon": "public/icon.ico"
     }
   }
 }

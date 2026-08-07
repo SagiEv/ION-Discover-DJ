@@ -4,15 +4,20 @@ const fs = require('fs')
 const url = require('url')
 const os = require('os')
 const ytSearch = require('yt-search')
-const youtubedl = require('youtube-dl-exec')
+let youtubedl = require('youtube-dl-exec')
 const easymidi = require('easymidi')
 
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged
 
+if (!isDev) {
+  const ytPath = youtubedl.constants.YOUTUBE_DL_PATH.replace('app.asar', 'app.asar.unpacked')
+  youtubedl = youtubedl.create(ytPath)
+}
+
 function createWindow() {
   const win = new BrowserWindow({
     title: 'DiscoverTube DJ',
-    icon: path.join(__dirname, '../public/icon.png'),
+    icon: path.join(__dirname, isDev ? '../public/icon.png' : '../dist/renderer/icon.png'),
     width: 1400,
     height: 820,
     minWidth: 1200,
@@ -143,8 +148,10 @@ ipcMain.handle('search-youtube', async (_, query) => {
     const title = video.title.replace(/[\/\\?%*:|"<>]/g, '') // Sanitize filename
     const videoId = video.videoId
     
-    // Save to spotifyDJ/songs
-    const songsDir = path.join(__dirname, '../songs')
+    // Save to userData/songs in production, so we don't write to read-only ASAR
+    const songsDir = isDev 
+      ? path.join(__dirname, '../songs')
+      : path.join(app.getPath('userData'), 'songs')
     if (!fs.existsSync(songsDir)) {
       fs.mkdirSync(songsDir, { recursive: true })
     }
@@ -178,7 +185,9 @@ ipcMain.handle('search-youtube', async (_, query) => {
 
 // ─── IPC: Load Default Library ──────────────────────────────────────────────
 ipcMain.handle('load-default-library', async () => {
-  const songsDir = path.join(__dirname, '../songs')
+  const songsDir = isDev 
+    ? path.join(__dirname, '../songs')
+    : path.join(app.getPath('userData'), 'songs')
   if (!fs.existsSync(songsDir)) return []
   
   const exts = new Set(['.mp3', '.flac', '.wav', '.ogg', '.aac', '.m4a', '.webm'])
