@@ -998,3 +998,54 @@ input.browser__search-input:focus {
 .midi-learn-footer button:hover { background: var(--bg-hover); }
 .midi-learn-footer button.primary { background: var(--accent-a); border-color: var(--accent-a); color: #000; }
 .midi-learn-footer button.primary:hover { opacity: 0.9; }
+
+/* ─── Lyrics View ───────────────────────────────────────────────────────────── */
+.deck__lyrics-toggle {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  border-radius: var(--radius-sm);
+  padding: 2px 6px;
+  font-size: 10px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.deck__lyrics-toggle:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.lyrics-view {
+  flex: 1;
+  position: relative;
+  overflow-y: auto;
+  padding: 16px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: var(--bg-base);
+  border-top: 1px solid var(--border);
+  border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+  scroll-behavior: smooth;
+  min-height: 120px;
+}
+
+.lyrics-line {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-muted);
+  line-height: 1.5;
+  transition: color 0.3s ease, transform 0.3s ease;
+  cursor: pointer;
+}
+
+.lyrics-line--active {
+  color: #fff;
+  font-size: 16px;
+  font-weight: 700;
+  transform: scale(1.02);
+}
+
+.lyrics-line--passed {
+  color: var(--text-secondary);
+}

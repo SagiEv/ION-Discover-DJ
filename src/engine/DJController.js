@@ -63,7 +63,20 @@ class DJController {
       cuePoint: 0,
       isReversed: false,
       bpm,
+      lyrics: null, // Reset lyrics on load
+      showLyrics: false
     })
+
+    if (trackInfo.videoId || trackInfo.path) {
+      try {
+        const transcriptResult = await window.electronAPI.getOrFetchSubtitles(trackInfo)
+        if (transcriptResult && transcriptResult.segments) {
+          useAppStore.getState().updateDeck(deckId, { lyrics: transcriptResult.segments, showLyrics: true })
+        }
+      } catch (err) {
+        console.error('Error fetching subtitles in controller:', err)
+      }
+    }
   }
 
   // ─── Play / Stutter ────────────────────────────────────────────────────────
