@@ -3,6 +3,7 @@ import { useAppStore } from '../store/appStore.js'
 import { getDJController } from '../engine/DJController.js'
 import { Knob } from './Knob.jsx'
 import { JogWheel } from './JogWheel.jsx'
+import { FXPanel } from './FXPanel.jsx'
 
 function DeckButtons({ deckId }) {
   const dj = getDJController()
@@ -189,6 +190,9 @@ export function ControllerSurface() {
       <div className="controller-surface__texture" />
 
       <div className="controller-layout">
+        {/* Left Deck FX */}
+        <FXPanel deckId="A" />
+
         {/* Left Deck (A) */}
         <div className="controller-deck controller-deck--a">
           <DeckButtons deckId="A" />
@@ -205,6 +209,9 @@ export function ControllerSurface() {
           <JogWheel deckId="B" onJog={handleJog} onJogRelease={handleJogRelease} />
           <DeckButtons deckId="B" />
         </div>
+
+        {/* Right Deck FX */}
+        <FXPanel deckId="B" />
       </div>
 
       {/* Crossfader */}

@@ -300,6 +300,65 @@ class DJController {
     useAppStore.getState().setMasterVolume(normalized)
   }
 
+  // ─── FX ───────────────────────────────────────────────────────────────────
+  setFXType(deckId, effectName) {
+    const deck = this._deck(deckId)
+    deck.fxChain.setEffect(effectName)
+    // When changing effect, usually we want it to be fully wet or off by default, but let's keep current state or sync with store
+    const store = useAppStore.getState()
+    const deckKey = deckId === 'A' ? 'deckA' : 'deckB'
+    
+    // Re-apply current parameters to new effect
+    deck.fxChain.setAmount(store[deckKey].fx.amount)
+    deck.fxChain.setBeatLength(store[deckKey].fx.beatTiming)
+    deck.fxChain.toggle(store[deckKey].fx.isOn)
+    if (effectName === 'Filter') {
+      deck.fxChain.setFilterMode(store[deckKey].fx.filterMode)
+    }
+
+    useAppStore.getState().updateDeck(deckId, {
+      fx: { ...store[deckKey].fx, selectedEffect: effectName }
+    })
+  }
+
+  toggleFX(deckId) {
+    const store = useAppStore.getState()
+    const deckKey = deckId === 'A' ? 'deckA' : 'deckB'
+    const newIsOn = !store[deckKey].fx.isOn
+    
+    this._deck(deckId).fxChain.toggle(newIsOn)
+    useAppStore.getState().updateDeck(deckId, {
+      fx: { ...store[deckKey].fx, isOn: newIsOn }
+    })
+  }
+
+  setFXAmount(deckId, amount) {
+    this._deck(deckId).fxChain.setAmount(amount)
+    const store = useAppStore.getState()
+    const deckKey = deckId === 'A' ? 'deckA' : 'deckB'
+    useAppStore.getState().updateDeck(deckId, {
+      fx: { ...store[deckKey].fx, amount }
+    })
+  }
+
+  setFXTiming(deckId, beats) {
+    this._deck(deckId).fxChain.setBeatLength(beats)
+    const store = useAppStore.getState()
+    const deckKey = deckId === 'A' ? 'deckA' : 'deckB'
+    useAppStore.getState().updateDeck(deckId, {
+      fx: { ...store[deckKey].fx, beatTiming: beats }
+    })
+  }
+
+  setFilterMode(deckId, mode) {
+    this._deck(deckId).fxChain.setFilterMode(mode)
+    const store = useAppStore.getState()
+    const deckKey = deckId === 'A' ? 'deckA' : 'deckB'
+    useAppStore.getState().updateDeck(deckId, {
+      fx: { ...store[deckKey].fx, filterMode: mode }
+    })
+  }
+
   // ─── Browse knob ──────────────────────────────────────────────────────────
   browseTurn(delta) {
     const store = useAppStore.getState()
