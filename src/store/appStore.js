@@ -18,6 +18,13 @@ const makeDeckState = () => ({
   queue: [],            // [{ name, path, duration, bpm }]
   lyrics: null,         // Array of subtitle segments { text, start, duration }
   showLyrics: false,
+  fx: {
+    isOn: false,
+    selectedEffect: 'Echo',
+    amount: 0.5,
+    beatTiming: 1, // 1/2, 1, 2, 4
+    filterMode: 'lowpass'
+  }
 })
 
 export const useAppStore = create((set, get) => ({

@@ -1,3 +1,5 @@
+import { FXChain } from './effects/FXChain.js'
+
 /**
  * Deck — represents one playback channel (A or B).
  *
@@ -6,6 +8,7 @@
  *     → BiquadFilter (treble, high-shelf @10kHz)
  *     → BiquadFilter (bass, low-shelf @200Hz)
  *     → GainNode (volume)
+ *     → FXChain (post-fader effects)
  *     → GainNode (crossfader send)
  *     → [AudioEngine master chain]
  */
@@ -30,7 +33,7 @@ export class Deck {
     this.cuePoint = 0        // in seconds
     this.duration = 0
 
-    this.bpm = 0
+    this._bpm = 0
 
     this.visualAngle = 0 // Tracks physical rotation for UI jog wheel
     this.isJogTouched = false // Freezes visual rotation when physical wheel is held
@@ -55,13 +58,25 @@ export class Deck {
     this.crossfaderSend = this.ctx.createGain()
     this.crossfaderSend.gain.value = 1.0
 
-    // Chain: treble → bass → volume → crossfaderSend
+    this.fxChain = new FXChain(this.ctx)
+
+    // Chain: treble → bass → volume → fxChain → crossfaderSend
     this.trebleFilter.connect(this.bassFilter)
     this.bassFilter.connect(this.volumeGain)
-    this.volumeGain.connect(this.crossfaderSend)
+    this.volumeGain.connect(this.fxChain.inputNode)
+    this.fxChain.outputNode.connect(this.crossfaderSend)
 
     // Position update interval
     this._positionTimer = null
+  }
+
+  get bpm() {
+    return this._bpm
+  }
+
+  set bpm(value) {
+    this._bpm = value
+    this.fxChain.setBpm(value)
   }
 
   // ─── Output node (connects to master) ──────────────────────────────────────
@@ -255,6 +270,8 @@ export class Deck {
     if (!this.bpm || !targetBpm || !this.sourceNode) return
     const ratio = targetBpm / this.bpm
     this.sourceNode.playbackRate.setTargetAtTime(ratio, this.ctx.currentTime, 0.05)
+    // The effective BPM changes, so update FX
+    this.fxChain.setBpm(targetBpm)
   }
 
   // ─── EQ controls (0–1 mapped to -12 to +12 dB) ──────────────────────────────
@@ -322,6 +339,7 @@ export class Deck {
     this.trebleFilter.disconnect()
     this.bassFilter.disconnect()
     this.volumeGain.disconnect()
+    this.fxChain.dispose()
     this.crossfaderSend.disconnect()
   }
 }

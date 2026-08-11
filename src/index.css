@@ -1049,3 +1049,120 @@ input.browser__search-input:focus {
 .lyrics-line--passed {
   color: var(--text-secondary);
 }
+
+/* ─── FX Panel ──────────────────────────────────────────────────────────────── */
+.fx-panel {
+  width: 140px;
+  height: 140px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.fx-panel--a { border-top: 2px solid var(--accent-a); }
+.fx-panel--b { border-top: 2px solid var(--accent-b); }
+
+.fx-panel__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.fx-panel__title {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-muted);
+  letter-spacing: 0.5px;
+}
+
+.fx-panel__body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  gap: 6px;
+}
+
+.fx-panel__grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  grid-template-rows: repeat(2, 1fr);
+  gap: 3px;
+}
+
+.fx-btn--grid {
+  padding: 4px 0;
+  font-size: 8px;
+  letter-spacing: 0.5px;
+}
+
+.fx-panel__main-control {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex: 1;
+}
+
+.fx-btn {
+  background: var(--bg-base);
+  border: 1px solid #333;
+  color: #aaa;
+  border-radius: 3px;
+  font-size: 9px;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 2px 4px;
+  transition: all 0.1s;
+}
+
+.fx-btn:hover { background: #333; }
+.fx-btn.active {
+  color: #fff;
+}
+
+.fx-panel--a .fx-btn.active {
+  background: var(--accent-a);
+  border-color: var(--accent-a);
+}
+
+.fx-panel--b .fx-btn.active {
+  background: var(--accent-b);
+  border-color: var(--accent-b);
+}
+
+.fx-panel__row--filter-mode {
+  display: flex;
+  gap: 4px;
+  justify-content: center;
+}
+
+.fx-panel__row--filter-mode .fx-btn { flex: 1; }
+
+.fx-panel__timing {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.fx-panel__timing-label {
+  font-size: 8px;
+  color: var(--text-muted);
+  font-weight: 700;
+}
+
+.fx-panel__timing-buttons {
+  display: flex;
+  gap: 2px;
+  width: 100%;
+}
+.fx-panel__timing-buttons .fx-btn { flex: 1; padding: 2px 0; }
+
+.hw-btn--fx-on {
+  min-width: 40px;
+  padding: 2px 4px;
+  font-size: 8px;
+}
