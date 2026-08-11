@@ -2,6 +2,7 @@ import React, { useCallback } from 'react'
 import { useAppStore } from '../store/appStore.js'
 import { getDJController } from '../engine/DJController.js'
 import { WaveformView } from './WaveformView.jsx'
+import { LyricsView } from './LyricsView.jsx'
 
 function fmt(secs) {
   if (!secs || isNaN(secs)) return '0:00'
@@ -180,8 +181,21 @@ export function DeckPanel({ deckId }) {
       {/* Time */}
       <div className="deck__time">
         <span className="deck__time__current">{fmt(deckState.position)}</span>
-        <span>─{fmt(remaining)}</span>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          {deckState.lyrics && (
+            <button
+              className="deck__lyrics-toggle"
+              onClick={() => useAppStore.getState().updateDeck(deckId, { showLyrics: !deckState.showLyrics })}
+            >
+              {deckState.showLyrics ? 'Hide Lyrics' : 'Show Lyrics'}
+            </button>
+          )}
+          <span>─{fmt(remaining)}</span>
+        </div>
       </div>
+
+      {/* Lyrics View */}
+      <LyricsView deckId={deckId} />
 
       {/* Queue */}
       <QueuePanel deckId={deckId} />

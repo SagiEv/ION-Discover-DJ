@@ -60,6 +60,7 @@ export function TrackBrowser() {
       addTracks([{
         path: trackInfo.path,
         name: trackInfo.name,
+        videoId: trackInfo.videoId,
         duration: 0,
         bpm: 0,
       }])

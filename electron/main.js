@@ -124,6 +124,34 @@ ipcMain.handle('save-midi-mapping', (_, mapping) => {
 })
 
 // ─── IPC: YouTube Search & Download ─────────────────────────────────────────
+const subtitleService = require('./subtitles/subtitle-service')
+
+ipcMain.handle('get-or-fetch-subtitles', async (_, trackInfo) => {
+  if (!trackInfo || !trackInfo.path) return null
+  const subPath = trackInfo.path.replace(/\.[^.]+$/, '.json')
+
+  try {
+    // 1. Try to load from disk
+    if (fs.existsSync(subPath)) {
+      const data = fs.readFileSync(subPath, 'utf8')
+      return JSON.parse(data)
+    }
+
+    // 2. Fetch if we have a videoId
+    if (trackInfo.videoId) {
+      const result = await subtitleService.getSubtitles(trackInfo.videoId)
+      if (result) {
+        fs.writeFileSync(subPath, JSON.stringify(result, null, 2))
+        return result
+      }
+    }
+    return null
+  } catch (error) {
+    console.error('Failed to get/fetch subtitles:', error)
+    return null
+  }
+})
+
 ipcMain.handle('search-youtube-suggestions', async (_, query) => {
   if (!query) return []
   try {
@@ -160,7 +188,7 @@ ipcMain.handle('search-youtube', async (_, query) => {
 
     // If file already exists, just return it
     if (fs.existsSync(tempFilePath)) {
-      return { path: tempFilePath, name: title }
+      return { path: tempFilePath, name: title, videoId }
     }
 
     // Download audio stream using yt-dlp as WebM
@@ -176,7 +204,7 @@ ipcMain.handle('search-youtube', async (_, query) => {
       ]
     })
 
-    return { path: tempFilePath, name: title }
+    return { path: tempFilePath, name: title, videoId }
   } catch (error) {
     console.error('YouTube search error:', error)
     throw error

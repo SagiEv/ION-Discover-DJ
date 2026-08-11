@@ -6,6 +6,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   loadDefaultLibrary: () => ipcRenderer.invoke('load-default-library'),
   searchYouTube: (query) => ipcRenderer.invoke('search-youtube', query),
   getSearchSuggestions: (query) => ipcRenderer.invoke('search-youtube-suggestions', query),
+  getOrFetchSubtitles: (trackInfo) => ipcRenderer.invoke('get-or-fetch-subtitles', trackInfo),
   readAudioFile: (filePath) => ipcRenderer.invoke('read-audio-file', filePath),
   loadMidiMapping: () => ipcRenderer.invoke('load-midi-mapping'),
   saveMidiMapping: (mapping) => ipcRenderer.invoke('save-midi-mapping', mapping),
