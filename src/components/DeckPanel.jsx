@@ -168,17 +168,87 @@ export function DeckPanel({ deckId }) {
             <>
               <div className="deck__artist">{deckState.track.path?.split(/[\\/]/).at(-2) ?? ''}</div>
               <div className="deck__bpm" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <div>BPM <span>{deckState.bpm || '—'}</span></div>
+                {(() => {
+                  const baseBpm = deckState.bpm ? parseFloat(deckState.bpm) : 0;
+                  const effectiveBpm = baseBpm ? (baseBpm * (1 + deckState.pitch / 100)).toFixed(1) : '—';
+                  const isNudging = deckState.liveRate && deckState.liveRate !== 1.0;
+                  const liveBpm = isNudging && baseBpm ? (baseBpm * (1 + deckState.pitch / 100) * deckState.liveRate).toFixed(1) : null;
+                  const color = deckId === 'A' ? 'var(--accent-a)' : 'var(--accent-b)';
+                  
+                  return (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <div>BPM <span>{effectiveBpm}</span></div>
+                      
+                      {/* Temporary Live Nudge Indicator */}
+                      <div style={{
+                        opacity: isNudging ? 1 : 0,
+                        transform: isNudging ? 'translateX(0)' : 'translateX(-10px)',
+                        transition: 'all 0.15s cubic-bezier(0.4, 0, 0.2, 1)',
+                        background: color,
+                        color: '#000',
+                        padding: '1px 6px',
+                        borderRadius: '4px',
+                        fontSize: '11px',
+                        fontWeight: '800',
+                        pointerEvents: 'none'
+                      }}>
+                        {deckState.liveRate > 1 ? '»' : '«'} {liveBpm}
+                      </div>
+                    </div>
+                  )
+                })()}
                 
                 <div style={{ 
-                  display: 'flex', alignItems: 'center', gap: '4px', 
+                  display: 'flex', alignItems: 'center', gap: '6px', 
                   background: 'rgba(255,255,255,0.05)', padding: '2px 8px', 
                   borderRadius: '12px', fontSize: '11px', color: 'var(--text-muted)' 
                 }}>
-                  <span style={{ fontWeight: 600, color: deckState.pitch !== 0 ? 'var(--accent-a)' : 'inherit' }}>
+                  <span style={{ 
+                    color: deckState.pitchDownPressed ? 'var(--accent-a)' : 'var(--text-muted)',
+                    opacity: deckState.pitchDownPressed ? 1 : 0.4,
+                    transition: 'all 0.1s',
+                    fontSize: '9px'
+                  }}>▼</span>
+                  <span style={{ fontWeight: 600, color: deckState.pitch !== 0 ? 'var(--accent-a)' : 'inherit', minWidth: '32px', textAlign: 'center' }}>
                     {deckState.pitch > 0 ? '+' : ''}{deckState.pitch.toFixed(1)}%
                   </span>
-                  <span style={{ fontSize: '9px', opacity: 0.7 }}>PITCH</span>
+                  <span style={{ 
+                    color: deckState.pitchUpPressed ? 'var(--accent-a)' : 'var(--text-muted)',
+                    opacity: deckState.pitchUpPressed ? 1 : 0.4,
+                    transition: 'all 0.1s',
+                    fontSize: '9px'
+                  }}>▲</span>
+                  <span style={{ fontSize: '9px', opacity: 0.7, marginLeft: '2px' }}>PITCH</span>
+                </div>
+                
+                {/* Pitch Lock (Cruise Control) */}
+                <div style={{ display: 'flex', alignItems: 'center' }}>
+                  <svg 
+                    width="14" height="14" viewBox="0 0 24 24" 
+                    fill={deckState.pitchLockRate ? 'var(--accent-a)' : 'none'}
+                    stroke={deckState.pitchLockRate ? 'var(--bg-base)' : 'var(--text-muted)'} 
+                    strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                    style={{ 
+                      cursor: 'pointer',
+                      opacity: deckState.pitchLockRate ? 1 : 0.6,
+                      transition: 'all 0.2s',
+                      filter: deckState.pitchLockRate ? 'drop-shadow(0 0 4px var(--accent-a))' : 'none'
+                    }}
+                    onClick={() => {
+                      const store = useAppStore.getState();
+                      import('../engine/DJController').then(({ getDJController }) => {
+                        const dj = getDJController();
+                        if (deckState.pitchLockRate) {
+                          dj.unlockScratchRate(deckId);
+                        } else {
+                          dj.lockCurrentScratchRate(deckId);
+                        }
+                      });
+                    }}
+                  >
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                  </svg>
                 </div>
                 
                 {deckState.isReversed && <span style={{ color: '#ef4444' }}>◀ REV</span>}

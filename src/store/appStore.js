@@ -26,6 +26,11 @@ const makeDeckState = () => ({
   duration: 0,
   cuePoint: 0,
   pitch: 0,             // -8 to +8 (percentage)
+  liveRate: 1.0,        // temporary playback rate for pitch bends
+  pitchLockRate: null,  // Locked playback rate (cruise control)
+  pitchLockTimestamp: null,
+  pitchDownPressed: false,
+  pitchUpPressed: false,
   
   // Stems
   stemsReady: false,
@@ -38,6 +43,7 @@ const makeDeckState = () => ({
 
   volume: 0.8,
   treble: 0.5,          // 0-1, 0.5 = 0dB
+  mid: 0.5,             // 0-1, 0.5 = 0dB
   bass: 0.5,
   bpm: 0,
   queue: [],            // [{ name, path, duration, bpm }]
@@ -53,6 +59,15 @@ const makeDeckState = () => ({
 })
 
 export const useAppStore = create((set, get) => ({
+  // ─── Hardware Button States ─────────────────────────────────────────────────
+  pressedButtons: {}, // e.g. { 'play_pause_A': true }
+  
+  eqMode: '3-band',   // '2-band' or '3-band'
+
+  setButtonPressed: (action, isPressed) => set(s => ({
+    pressedButtons: { ...s.pressedButtons, [action]: isPressed }
+  })),
+
   // ─── Decks ──────────────────────────────────────────────────────────────────
   deckA: makeDeckState(),
   deckB: makeDeckState(),
@@ -127,8 +142,9 @@ export const useAppStore = create((set, get) => ({
   })),
 
   // ─── Scratch mode (global toggle, mirrors hardware LED) ─────────────────────
-  scratchModeEnabled: false,
+  scratchModeEnabled: true, // Hardware boots with Scratch mode ON by default
   toggleScratchMode: () => set(state => ({ scratchModeEnabled: !state.scratchModeEnabled })),
+  setScratchMode: (enabled) => set({ scratchModeEnabled: enabled }),
 
   // ─── Browse ─────────────────────────────────────────────────────────────────
   browseIndex: 0,

@@ -906,7 +906,8 @@ input.browser__search-input {
   border-color: #444;
 }
 
-.hw-btn:active {
+.hw-btn:active,
+.hw-btn.hw-btn--pressed {
   transform: translateY(1px);
   box-shadow:
     0 1px 2px rgba(0,0,0,0.5),

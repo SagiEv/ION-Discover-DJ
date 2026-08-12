@@ -7,6 +7,9 @@ export function MixerPanel() {
   const masterVolume = useAppStore(s => s.masterVolume)
   const volumeA = useAppStore(s => s.deckA.volume)
   const volumeB = useAppStore(s => s.deckB.volume)
+  const bassA = useAppStore(s => s.deckA.bass)
+  const bassB = useAppStore(s => s.deckB.bass)
+  const eqMode = useAppStore(s => s.eqMode)
   const dj = getDJController()
 
   return (
@@ -14,16 +17,19 @@ export function MixerPanel() {
       {/* Left: Deck A volume fader */}
       <div className="mixer__side mixer__side--a">
         <div className="mixer__vol">
-          <label>A</label>
+          <label>{eqMode === '3-band' ? 'LOW (A)' : 'A'}</label>
           <input
             id="fader-a"
             type="range" min="0" max="1" step="0.01"
-            value={volumeA ?? 0.8}
-            onChange={e => dj.setVolume('A', parseFloat(e.target.value))}
+            value={eqMode === '3-band' ? (bassA ?? 0.5) : (volumeA ?? 0.8)}
+            onChange={e => {
+              if (eqMode === '3-band') dj.setBass('A', parseFloat(e.target.value))
+              else dj.setVolume('A', parseFloat(e.target.value))
+            }}
           />
         </div>
         <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-          {Math.round((volumeA ?? 0.8) * 100)}%
+          {Math.round((eqMode === '3-band' ? (bassA ?? 0.5) : (volumeA ?? 0.8)) * 100)}%
         </div>
       </div>
 
@@ -57,15 +63,18 @@ export function MixerPanel() {
       {/* Right: Deck B volume fader */}
       <div className="mixer__side mixer__side--b">
         <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-          {Math.round((volumeB ?? 0.8) * 100)}%
+          {Math.round((eqMode === '3-band' ? (bassB ?? 0.5) : (volumeB ?? 0.8)) * 100)}%
         </div>
         <div className="mixer__vol">
-          <label>B</label>
+          <label>{eqMode === '3-band' ? 'LOW (B)' : 'B'}</label>
           <input
             id="fader-b"
             type="range" min="0" max="1" step="0.01"
-            value={volumeB ?? 0.8}
-            onChange={e => dj.setVolume('B', parseFloat(e.target.value))}
+            value={eqMode === '3-band' ? (bassB ?? 0.5) : (volumeB ?? 0.8)}
+            onChange={e => {
+              if (eqMode === '3-band') dj.setBass('B', parseFloat(e.target.value))
+              else dj.setVolume('B', parseFloat(e.target.value))
+            }}
           />
         </div>
       </div>

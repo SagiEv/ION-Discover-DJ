@@ -198,9 +198,16 @@ class DJController {
   }
 
   // ─── Pitch bend (held buttons act as pitch fader) ────────────────────────
-  pitchBendDown(deckId) { this._startPitchStep(deckId, -0.5) }
-  pitchBendUp(deckId)   { this._startPitchStep(deckId, 0.5) }
+  pitchBendDown(deckId) { 
+    useAppStore.getState().updateDeck(deckId, { pitchDownPressed: true })
+    this._startPitchStep(deckId, -0.5) 
+  }
+  pitchBendUp(deckId) { 
+    useAppStore.getState().updateDeck(deckId, { pitchUpPressed: true })
+    this._startPitchStep(deckId, 0.5) 
+  }
   pitchBendRelease(deckId) { 
+    useAppStore.getState().updateDeck(deckId, { pitchDownPressed: false, pitchUpPressed: false })
     if (this._pitchIntervals[deckId]) {
       clearInterval(this._pitchIntervals[deckId])
       this._pitchIntervals[deckId] = null
@@ -242,6 +249,21 @@ class DJController {
   onJogWheel(deckId, midiValue) {
     const store = useAppStore.getState()
     const deck = this._deck(deckId)
+    const deckState = store[deckId === 'A' ? 'deckA' : 'deckB']
+    
+    if (deckState.pitchLockRate !== null) {
+      if (Date.now() - (deckState.pitchLockTimestamp || 0) < 5000) {
+        return;
+      } else {
+        // Only unlock if they purposely move it (ignore physical platter jitter)
+        let deltaCheck = midiValue > 64 ? midiValue - 128 : midiValue
+        if (Math.abs(deltaCheck) > 2) {
+          this.unlockScratchRate(deckId);
+        } else {
+          return; // Ignore tiny vibrations!
+        }
+      }
+    }
     
     // Standard relative MIDI: < 64 is forward ticks, > 64 is backward ticks (two's complement)
     let delta = midiValue > 64 ? midiValue - 128 : midiValue
@@ -267,19 +289,42 @@ class DJController {
     // Reset rate when the wheel stops moving
     this._jogTimer[deckId] = setTimeout(() => {
       this._jogTimer[deckId] = null
-      if (isScratching) {
-        if (deck.isPlaying) deck.setScratchRate(0.0) // Held record stops
+      
+      // Read CURRENT touch state, not closure state!
+      const storeState = useAppStore.getState();
+      const currentlyScratching = this._jogTouched[deckId] && storeState.scratchModeEnabled;
+      const deckState = storeState[deckId === 'A' ? 'deckA' : 'deckB'];
+      
+      if (deckState.pitchLockRate !== null) {
+        // Cruise control is active, do NOT brake or release!
+        return;
+      }
+      
+      if (currentlyScratching) {
+        if (deck.isPlaying) deck.brakeScratch() // Platter inertia stop
       } else {
         deck.releaseScratch() // Return to normal playback speed
+        store.updateDeck(deckId, { liveRate: 1.0 })
       }
-    }, 150)
+    }, 45) // Reduced from 150ms to 45ms for extremely tight scratch response
 
     if (!isScratching) {
       // Search mode: pitch bend when playing, seek when paused
       if (deck.isPlaying) {
         // Pitch bend (Nudge)
-        const rate = 1.0 + (delta * 0.015) // Gentle nudge for beatmatching
-        deck.setScratchRate(Math.max(0.5, Math.min(2, rate)))
+        const currentPitchRate = 1.0 + (store[deckId === 'A' ? 'deckA' : 'deckB'].pitch / 100)
+        const nudgeMultiplier = 1.0 + (delta * 0.015)
+        const rate = currentPitchRate * nudgeMultiplier // Gentle nudge for beatmatching
+        const clampedRate = Math.max(0.5, Math.min(2, rate))
+        deck.setScratchRate(clampedRate)
+        
+        // Throttle store updates to prevent React UI freezing (prevents missed lock clicks)
+        const now = Date.now()
+        if (!this._lastLiveRateUpdate) this._lastLiveRateUpdate = {}
+        if (now - (this._lastLiveRateUpdate[deckId] || 0) > 50) {
+          store.updateDeck(deckId, { liveRate: nudgeMultiplier })
+          this._lastLiveRateUpdate[deckId] = now
+        }
       } else {
         // Fast search when paused
         const seekDelta = delta * 0.05
@@ -287,10 +332,31 @@ class DJController {
       }
     } else {
       // Scratch mode
-      // Mixxx uses direct audio buffer scrubbing (engine.scratchTick)
-      // Physical delta is directly applied to position
-      const scratchDelta = delta * 0.02; // Sensitivity for scratching
-      deck.seekTo(deck.getCurrentPosition() + scratchDelta);
+      if (deck.isPlaying) {
+        // Use playbackRate to scrub audio naturally without timeline jumps
+        const targetRate = delta * 0.2; // Sensitivity for scratching
+        const isBackward = targetRate < 0;
+        const absRate = Math.abs(targetRate);
+        
+        // Compare with base direction to decide if we need to flip the buffer
+        const baseRev = this._scratchBaseRev[deckId] || false;
+        const shouldBeReversed = isBackward ? !baseRev : baseRev;
+        
+        if (deck.isReversed !== shouldBeReversed) {
+          const now = Date.now();
+          if (!this._lastReverseTime) this._lastReverseTime = {};
+          if (now - (this._lastReverseTime[deckId] || 0) > 40) {
+            deck.toggleReverse();
+            this._lastReverseTime[deckId] = now;
+          }
+        }
+        
+        deck.setScratchRate(Math.max(0.01, Math.min(16, absRate)));
+      } else {
+        // Fast seek when paused
+        const seekDelta = delta * 0.05;
+        deck.seekTo(deck.getCurrentPosition() + seekDelta);
+      }
     }
   }
 
@@ -300,10 +366,19 @@ class DJController {
     deck.isJogTouched = true
     this._scratchBaseRev[deckId] = deck.isReversed // Save real direction
     const store = useAppStore.getState()
+    const deckState = store[deckId === 'A' ? 'deckA' : 'deckB']
+
+    if (deckState.pitchLockRate !== null) {
+      if (Date.now() - (deckState.pitchLockTimestamp || 0) < 5000) {
+        return; // Ignore touch during protection window
+      } else {
+        this.unlockScratchRate(deckId);
+      }
+    }
+
     if (store.scratchModeEnabled) {
-      const deck = this._deck(deckId)
       if (deck.isPlaying) {
-        deck.setScratchRate(0.0) // Stop immediately but keep the state "playing"
+        deck.brakeScratch() // Stop immediately with platter inertia
       }
     }
   }
@@ -312,11 +387,59 @@ class DJController {
     this._jogTouched[deckId] = false
     const deck = this._deck(deckId)
     deck.isJogTouched = false
+    const store = useAppStore.getState()
+    const deckState = store[deckId === 'A' ? 'deckA' : 'deckB']
+
+    if (deckState.pitchLockRate !== null) {
+      return; // Ignore release if locked
+    }
+
+    // Clear any pending wheel stop timers
+    if (this._jogTimer[deckId]) {
+      clearTimeout(this._jogTimer[deckId])
+      this._jogTimer[deckId] = null
+    }
+
     const baseRev = this._scratchBaseRev[deckId] || false;
     if (deck.isReversed !== baseRev) {
       deck.toggleReverse()
     }
     deck.releaseScratch()
+    useAppStore.getState().updateDeck(deckId, { liveRate: 1.0 })
+  }
+
+  // ─── Pitch Lock (Cruise Control) ───────────────────────────────────────────
+  lockCurrentScratchRate(deckId) {
+    const deck = this._deck(deckId)
+    const store = useAppStore.getState()
+    
+    let rateToLock = deck._currentPlaybackRate;
+    // Recover the fast speed if they were just spinning it within the last 2 seconds!
+    if (deck._lastActiveScratchRate && Date.now() - (deck._lastActiveScratchTime || 0) < 2000) {
+      rateToLock = deck._lastActiveScratchRate;
+    }
+    
+    if (deck.isPlaying && rateToLock !== undefined) {
+      deck.setScratchRate(rateToLock); // Force audio node back to the locked speed
+      
+      store.updateDeck(deckId, {
+        pitchLockRate: rateToLock,
+        pitchLockTimestamp: Date.now(),
+        liveRate: rateToLock / deck.pitchRate // Update UI to reflect the recovered speed
+      })
+    }
+  }
+
+  unlockScratchRate(deckId) {
+    const store = useAppStore.getState()
+    store.updateDeck(deckId, {
+      pitchLockRate: null,
+      pitchLockTimestamp: null
+    })
+    const deck = this._deck(deckId)
+    if (deck.isPlaying) {
+      deck.releaseScratch()
+    }
   }
 
   // ─── Stems ────────────────────────────────────────────────────────────────
@@ -477,6 +600,10 @@ class DJController {
     const isOff = msg.type === 'noteoff'
     const val = msg.value !== undefined ? msg.value / 127 : 0
     const rawVal = msg.value ?? 0
+    
+    // Store physical button pressed state for UI feedback
+    if (isOn) useAppStore.getState().setButtonPressed(action, true)
+    if (isOff) useAppStore.getState().setButtonPressed(action, false)
 
     switch (action) {
       // Deck A buttons
@@ -510,9 +637,28 @@ class DJController {
 
       // Deck A knobs (CC)
       case 'pitch_slider_A': this.setPitchSlider('A', val); break
-      case 'treble_A':      this.setTreble('A', val); break
-      case 'bass_A':        this.setBass('A', val); break
-      case 'volume_A':      this.setVolume('A', val); break
+      case 'treble_A':      
+        if (store.eqMode === '3-band') {
+          this.setTreble('A', val); // High
+        } else {
+          this.setTreble('A', val);
+        }
+        break
+      case 'bass_A':
+        if (store.eqMode === '3-band') {
+          this._deck('A').setMid(val); // Mid
+          store.updateDeck('A', { mid: val })
+        } else {
+          this.setBass('A', val);
+        }
+        break
+      case 'volume_A':
+        if (store.eqMode === '3-band') {
+          this.setBass('A', val); // Low
+        } else {
+          this.setVolume('A', val);
+        }
+        break
 
       // Deck B buttons
       case 'play_pause_B':  if (isOn) this.togglePlay('B'); break
@@ -545,9 +691,28 @@ class DJController {
 
       // Deck B knobs
       case 'pitch_slider_B': this.setPitchSlider('B', val); break
-      case 'treble_B':      this.setTreble('B', val); break
-      case 'bass_B':        this.setBass('B', val); break
-      case 'volume_B':      this.setVolume('B', val); break
+      case 'treble_B':      
+        if (store.eqMode === '3-band') {
+          this.setTreble('B', val); // High
+        } else {
+          this.setTreble('B', val);
+        }
+        break
+      case 'bass_B':
+        if (store.eqMode === '3-band') {
+          this._deck('B').setMid(val); // Mid
+          store.updateDeck('B', { mid: val })
+        } else {
+          this.setBass('B', val);
+        }
+        break
+      case 'volume_B':
+        if (store.eqMode === '3-band') {
+          this.setBass('B', val); // Low
+        } else {
+          this.setVolume('B', val);
+        }
+        break
 
       // Center controls
       case 'crossfader':    this.setCrossfader(1.0 - val); break
@@ -560,7 +725,9 @@ class DJController {
         if (isOn) { /* expand folder / load logic */ }
         break
       case 'scratch_toggle':
-        if (isOn) this.toggleScratchMode()
+        // The hardware button acts as a latch (maintains its own state).
+        // It sends noteon when pressed to turn ON, and noteoff when pressed to turn OFF.
+        useAppStore.getState().setScratchMode(isOn)
         break
     }
   }

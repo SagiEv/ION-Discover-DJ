@@ -115,6 +115,7 @@ function DeckButtons({ deckId }) {
   const dj = getDJController()
   const isA = deckId === 'A'
   const deckState = useAppStore(s => isA ? s.deckA : s.deckB)
+  const pressed = useAppStore(s => s.pressedButtons)
 
   const onPlay = useCallback(() => dj.playStutter(deckId), [deckId])
   const onPause = useCallback(() => dj.pause(deckId), [deckId])
@@ -126,21 +127,21 @@ function DeckButtons({ deckId }) {
   return (
     <div className="hw-btn-column">
       <button
-        className={`hw-btn hw-btn--sync ${deckState.isPlaying ? (isA ? 'active--a' : 'active--b') : ''}`}
+        className={`hw-btn hw-btn--sync ${deckState.isSyncEnabled ? (isA ? 'active--a' : 'active--b') : ''} ${pressed[`sync_${deckId}`] ? 'hw-btn--pressed' : ''}`}
         onClick={onSync}
         title="SYNC"
       >
         SYNC
       </button>
       <button
-        className={`hw-btn hw-btn--rev ${deckState.isReversed ? 'active--rev' : ''}`}
+        className={`hw-btn hw-btn--rev ${deckState.isReversed ? 'active--rev' : ''} ${pressed[`rev_${deckId}`] ? 'hw-btn--pressed' : ''}`}
         onClick={onRev}
         title="REV"
       >
         REV
       </button>
       <button
-        className="hw-btn hw-btn--cue"
+        className={`hw-btn hw-btn--cue ${pressed[`cue_${deckId}`] ? 'hw-btn--pressed' : ''}`}
         onMouseDown={onCueDown}
         onMouseUp={onCueUp}
         title="CUE"
@@ -148,7 +149,7 @@ function DeckButtons({ deckId }) {
         CUE
       </button>
       <button
-        className={`hw-btn hw-btn--play ${deckState.isPlaying ? (isA ? 'active--a' : 'active--b') : ''}`}
+        className={`hw-btn hw-btn--play ${deckState.isPlaying ? (isA ? 'active--a' : 'active--b') : ''} ${pressed[`play_pause_${deckId}`] || pressed[`play_${deckId}`] ? 'hw-btn--pressed' : ''}`}
         onClick={deckState.isPlaying ? onPause : onPlay}
         title="PLAY / PAUSE"
       >
@@ -162,6 +163,8 @@ function DeckKnobs({ deckId }) {
   const dj = getDJController()
   const isA = deckId === 'A'
   const deckState = useAppStore(s => isA ? s.deckA : s.deckB)
+  const pressed = useAppStore(s => s.pressedButtons)
+  const eqMode = useAppStore(s => s.eqMode)
 
   const onPitchDown = useCallback(() => dj.pitchBendDown(deckId), [deckId])
   const onPitchUp = useCallback(() => dj.pitchBendUp(deckId), [deckId])
@@ -171,7 +174,7 @@ function DeckKnobs({ deckId }) {
     <div className="knob-column">
       <div className="pitch-btns">
         <button
-          className="hw-btn hw-btn--pitch"
+          className={`hw-btn hw-btn--pitch ${pressed[`pitch_minus_${deckId}`] ? 'hw-btn--pressed' : ''}`}
           onMouseDown={onPitchDown}
           onMouseUp={onPitchRelease}
           onMouseLeave={onPitchRelease}
@@ -180,7 +183,7 @@ function DeckKnobs({ deckId }) {
           −%
         </button>
         <button
-          className="hw-btn hw-btn--pitch"
+          className={`hw-btn hw-btn--pitch ${pressed[`pitch_plus_${deckId}`] ? 'hw-btn--pressed' : ''}`}
           onMouseDown={onPitchUp}
           onMouseUp={onPitchRelease}
           onMouseLeave={onPitchRelease}
@@ -190,21 +193,34 @@ function DeckKnobs({ deckId }) {
         </button>
       </div>
       <Knob
-        label="TREBLE"
+        label={eqMode === '3-band' ? 'HIGH' : 'TREBLE'}
         value={deckState.treble ?? 0.5}
         onChange={v => dj.setTreble(deckId, v)}
         size={40}
       />
       <Knob
-        label="BASS"
-        value={deckState.bass ?? 0.5}
-        onChange={v => dj.setBass(deckId, v)}
+        label={eqMode === '3-band' ? 'MID' : 'BASS'}
+        value={eqMode === '3-band' ? (deckState.mid ?? 0.5) : (deckState.bass ?? 0.5)}
+        onChange={v => {
+          if (eqMode === '3-band') {
+            dj._deck(deckId).setMid(v);
+            useAppStore.getState().updateDeck(deckId, { mid: v })
+          } else {
+            dj.setBass(deckId, v)
+          }
+        }}
         size={40}
       />
       <Knob
-        label="VOLUME"
-        value={deckState.volume ?? 0.8}
-        onChange={v => dj.setVolume(deckId, v)}
+        label={eqMode === '3-band' ? 'LOW' : 'VOLUME'}
+        value={eqMode === '3-band' ? (deckState.bass ?? 0.5) : (deckState.volume ?? 0.8)}
+        onChange={v => {
+          if (eqMode === '3-band') {
+            dj.setBass(deckId, v)
+          } else {
+            dj.setVolume(deckId, v)
+          }
+        }}
         size={40}
       />
     </div>
@@ -215,6 +231,8 @@ function CenterSection() {
   const dj = getDJController()
   const masterVolume = useAppStore(s => s.masterVolume)
   const scratchMode = useAppStore(s => s.scratchModeEnabled)
+  const pressed = useAppStore(s => s.pressedButtons)
+  const eqMode = useAppStore(s => s.eqMode)
 
   return (
     <div className="controller-center">
@@ -233,23 +251,36 @@ function CenterSection() {
         }}
         size={50}
       />
+      
+      {/* EQ Mode Toggle */}
+      <button 
+        className="hw-btn" 
+        style={{ width: '40px', height: '24px', fontSize: '9px', padding: 0, marginTop: '10px' }}
+        onClick={() => {
+          const current = useAppStore.getState().eqMode;
+          useAppStore.setState({ eqMode: current === '2-band' ? '3-band' : '2-band' });
+        }}
+        title="Toggle 2-Band (Volume) / 3-Band (High/Mid/Low) EQ"
+      >
+        {eqMode === '3-band' ? '3-EQ' : '2-EQ'}
+      </button>
       <div className="load-buttons">
         <button
-          className="hw-btn hw-btn--load"
+          className={`hw-btn hw-btn--load ${pressed['load_A'] ? 'hw-btn--pressed' : ''}`}
           onClick={() => dj._loadSelectedToDeck('A')}
           title="Load to Deck A"
         >
           A
         </button>
         <button
-          className={`hw-btn hw-btn--scratch ${scratchMode ? 'active--scratch' : ''}`}
+          className={`hw-btn hw-btn--scratch ${scratchMode ? 'active--scratch' : ''} ${pressed['scratch_toggle'] ? 'hw-btn--pressed' : ''}`}
           onClick={() => dj.toggleScratchMode()}
           title="Scratch / Search"
         >
           {scratchMode ? '●' : '○'}
         </button>
         <button
-          className="hw-btn hw-btn--load"
+          className={`hw-btn hw-btn--load ${pressed['load_B'] ? 'hw-btn--pressed' : ''}`}
           onClick={() => dj._loadSelectedToDeck('B')}
           title="Load to Deck B"
         >
