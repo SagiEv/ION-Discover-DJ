@@ -5,6 +5,112 @@ import { Knob } from './Knob.jsx'
 import { JogWheel } from './JogWheel.jsx'
 import { FXPanel } from './FXPanel.jsx'
 
+function StemProgress({ deckId }) {
+  const isA = deckId === 'A'
+  const deckState = useAppStore(s => isA ? s.deckA : s.deckB)
+
+  const isFailed = deckState.stemsProgress && deckState.stemsProgress.toLowerCase().includes('failed:')
+
+  if (
+    !deckState.track || 
+    deckState.stemsReady || 
+    (!isFailed && deckState.stemsFailed) || 
+    !deckState.stemsProgress || 
+    (!isFailed && deckState.stemsProgress.toLowerCase().includes('done'))
+  ) {
+    return <div style={{ width: '30%', height: '4px' }} /> // placeholder
+  }
+
+  // Parse progress
+  let pct = 0
+  const match = deckState.stemsProgress.match(/(\d+)\/(\d+)/)
+  if (match) {
+    const curr = parseInt(match[1], 10)
+    const total = parseInt(match[2], 10)
+    if (total > 0) pct = (curr / total) * 100
+  } else if (deckState.stemsProgress.includes('%')) {
+    const m = deckState.stemsProgress.match(/(\d+(\.\d+)?)%/)
+    if (m) pct = parseFloat(m[1])
+  } else if (deckState.stemsProgress.toLowerCase().includes('done') || deckState.stemsProgress.toLowerCase().includes('writing')) {
+    pct = 100
+  }
+  // Format text for user
+  let progressText = deckState.stemsProgress
+  let isProcessing = true
+  const lowerText = progressText.toLowerCase()
+
+  if (lowerText.includes('wrote:')) {
+    const fileMatch = progressText.match(/([^\\/]+)\.wav/i)
+    if (fileMatch) {
+      progressText = `Saved ${fileMatch[1]} track...`
+    } else {
+      progressText = 'Saving track...'
+    }
+  } else if (progressText.match(/^\d+\/\d+$/)) {
+    progressText = 'Separating track...'
+  } else if (lowerText.includes('loading model') || lowerText.includes('reading')) {
+    progressText = 'Starting to separate the track...'
+  } else if (lowerText.includes('done')) {
+    progressText = 'Done!'
+    isProcessing = false
+  } else if (lowerText.includes('writing')) {
+    progressText = 'Finalizing files...'
+  } else if (lowerText.includes('failed:')) {
+    progressText = deckState.stemsProgress // Keep the exact error message we sent from main
+    isProcessing = false
+  }
+
+  const isError = lowerText.includes('failed:')
+  const color = isError ? '#ef4444' : (isA ? '#1db954' : '#3b82f6')
+  const barWidth = isError ? '100%' : `${pct}%`
+
+  return (
+    <div style={{ width: '35%', display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '10px' }}>
+      <style>
+        {`
+          @keyframes stem-pulse-anim {
+            0% { opacity: 1; }
+            50% { opacity: 0.3; }
+            100% { opacity: 1; }
+          }
+          .stem-progress-pulse {
+            animation: stem-pulse-anim 1.5s ease-in-out infinite;
+          }
+        `}
+      </style>
+      <div style={{ 
+        width: '100%', 
+        height: '6px', 
+        background: '#1a1a1a', 
+        borderRadius: '3px', 
+        overflow: 'hidden', 
+        boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.8), 0 1px 0 rgba(255,255,255,0.05)',
+      }}>
+        <div style={{ 
+          width: barWidth, 
+          height: '100%', 
+          background: color, 
+          transition: 'width 0.3s ease',
+          boxShadow: `0 0 8px ${color}80`
+        }} />
+      </div>
+      <div 
+        className={isProcessing ? 'stem-progress-pulse' : ''}
+        style={{ 
+        fontSize: '10px', 
+        color: '#888', 
+        textAlign: isA ? 'left' : 'right', 
+        fontFamily: 'monospace',
+        whiteSpace: 'nowrap',
+        overflow: 'hidden',
+        textOverflow: 'ellipsis'
+      }}>
+        {progressText}
+      </div>
+    </div>
+  )
+}
+
 function DeckButtons({ deckId }) {
   const dj = getDJController()
   const isA = deckId === 'A'
@@ -216,6 +322,12 @@ export function ControllerSurface() {
 
       {/* Crossfader */}
       <Crossfader />
+
+      {/* Stem Progress Bars */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0 40px', marginTop: '4px', position: 'relative', zIndex: 10 }}>
+        <StemProgress deckId="A" />
+        <StemProgress deckId="B" />
+      </div>
 
       {/* ION Branding */}
       <div className="ion-branding">

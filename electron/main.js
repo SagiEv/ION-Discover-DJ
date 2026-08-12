@@ -107,6 +107,166 @@ ipcMain.handle('read-audio-file', async (_, filePath) => {
   return buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength)
 })
 
+// ─── IPC: Separate Stems using Demucs ───────────────────────────────────────
+const { execFile } = require('child_process')
+const util = require('util')
+const execFileAsync = util.promisify(execFile)
+
+ipcMain.handle('check-stems', (_, trackId) => {
+  if (!trackId) return null
+  
+  const devDir = path.join('D:\\SpotifyDJ_Stems', trackId)
+  const prodDir = path.join(app.getPath('userData'), 'stems', trackId)
+  
+  const checkDir = (stemsDir) => {
+    const result = {
+      vocals: path.join(stemsDir, 'vocals.wav'),
+      drums: path.join(stemsDir, 'drums.wav'),
+      bass: path.join(stemsDir, 'bass.wav'),
+      other: path.join(stemsDir, 'other.wav')
+    }
+    if (fs.existsSync(result.vocals) && fs.existsSync(result.drums) && fs.existsSync(result.bass) && fs.existsSync(result.other)) {
+      return result
+    }
+    return null
+  }
+
+  // Always prefer the environment's target directory first
+  const primaryResult = checkDir(isDev ? devDir : prodDir)
+  if (primaryResult) return primaryResult
+
+  // Fallback to the other directory so old stems are not lost
+  return checkDir(isDev ? prodDir : devDir)
+})
+
+let demucsWorker = null
+let workerIdleTimer = null
+let currentDemucsTask = null
+let demucsQueuePromise = Promise.resolve()
+
+function startDemucsWorker() {
+  if (demucsWorker) return
+  const env = Object.assign({}, process.env, { ELECTRON_RUN_AS_NODE: '1' })
+  demucsWorker = require('child_process').fork(path.join(__dirname, 'demucsWorker.mjs'), [], { env })
+  
+  demucsWorker.on('message', (msg) => {
+    if (!currentDemucsTask) return
+    
+    if (workerIdleTimer) { clearTimeout(workerIdleTimer); workerIdleTimer = null }
+    
+    if (msg.type === 'progress') {
+      BrowserWindow.getAllWindows().forEach(w => w.webContents.send('demucs-progress', { trackId: msg.trackId, progress: msg.progress }))
+    } else if (msg.type === 'done') {
+      currentDemucsTask.resolve(msg.outputDir)
+      currentDemucsTask = null
+      resetWorkerIdleTimer()
+    } else if (msg.type === 'error') {
+      currentDemucsTask.reject(new Error(msg.error))
+      currentDemucsTask = null
+      if (demucsWorker) {
+        demucsWorker.kill()
+        demucsWorker = null
+      }
+    }
+  })
+  
+  demucsWorker.on('exit', () => {
+    demucsWorker = null
+    if (currentDemucsTask) {
+      currentDemucsTask.reject(new Error('Worker exited unexpectedly'))
+      currentDemucsTask = null
+    }
+  })
+}
+
+function resetWorkerIdleTimer() {
+  if (workerIdleTimer) clearTimeout(workerIdleTimer)
+  workerIdleTimer = setTimeout(() => {
+    if (demucsWorker && !currentDemucsTask) {
+      demucsWorker.kill()
+      demucsWorker = null
+      console.log('[StemSeparator IPC] Idle worker killed')
+    }
+  }, 60000)
+}
+
+ipcMain.on('cancel-demucs', (event, trackId) => {
+  if (currentDemucsTask && currentDemucsTask.trackId === trackId) {
+    if (demucsWorker) {
+      demucsWorker.kill()
+      demucsWorker = null
+    }
+    currentDemucsTask.reject(new Error('Cancelled'))
+    currentDemucsTask = null
+    console.log('[StemSeparator IPC] Cancelled track', trackId)
+  }
+})
+
+ipcMain.handle('separate-stems', async (event, wavBuffer, trackId) => {
+  const execute = async () => {
+    const tempDir = isDev ? 'D:\\SpotifyDJ_Temp' : app.getPath('temp')
+    if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true })
+    
+    const inputWav = path.join(tempDir, `demucs_in_${Date.now()}.wav`)
+    const outDir = path.join(tempDir, `demucs_out_${Date.now()}`)
+
+    try {
+      fs.writeFileSync(inputWav, Buffer.from(wavBuffer))
+      
+      startDemucsWorker()
+      if (workerIdleTimer) { clearTimeout(workerIdleTimer); workerIdleTimer = null }
+      
+      console.log('[StemSeparator IPC] Sending track to worker:', inputWav)
+      
+      const sourceStemsDir = await new Promise((resolve, reject) => {
+        currentDemucsTask = { trackId, resolve, reject, inputWav, outDir }
+        demucsWorker.send({ type: 'process', inputPath: inputWav, outputDir: outDir, trackId })
+      })
+      
+      if (!fs.existsSync(path.join(sourceStemsDir, 'vocals.wav')) || 
+          !fs.existsSync(path.join(sourceStemsDir, 'drums.wav')) ||
+          !fs.existsSync(path.join(sourceStemsDir, 'bass.wav')) ||
+          !fs.existsSync(path.join(sourceStemsDir, 'other.wav'))) {
+        throw new Error('Demucs reported success but output files are missing.')
+      }
+      
+      let finalStemsDir = sourceStemsDir
+      if (trackId) {
+        const baseStemsDir = isDev ? 'D:\\SpotifyDJ_Stems' : path.join(app.getPath('userData'), 'stems')
+        finalStemsDir = path.join(baseStemsDir, trackId)
+        if (!fs.existsSync(finalStemsDir)) {
+          fs.mkdirSync(finalStemsDir, { recursive: true })
+        }
+        fs.copyFileSync(path.join(sourceStemsDir, 'vocals.wav'), path.join(finalStemsDir, 'vocals.wav'))
+        fs.copyFileSync(path.join(sourceStemsDir, 'drums.wav'), path.join(finalStemsDir, 'drums.wav'))
+        fs.copyFileSync(path.join(sourceStemsDir, 'bass.wav'), path.join(finalStemsDir, 'bass.wav'))
+        fs.copyFileSync(path.join(sourceStemsDir, 'other.wav'), path.join(finalStemsDir, 'other.wav'))
+      }
+      
+      return {
+        vocals: path.join(finalStemsDir, 'vocals.wav'),
+        drums: path.join(finalStemsDir, 'drums.wav'),
+        bass: path.join(finalStemsDir, 'bass.wav'),
+        other: path.join(finalStemsDir, 'other.wav')
+      }
+    } catch (error) {
+      console.error('[StemSeparator IPC] Error:', error)
+      return null
+    } finally {
+      try {
+        if (fs.existsSync(inputWav)) fs.unlinkSync(inputWav)
+        if (fs.existsSync(outDir)) fs.rmSync(outDir, { recursive: true, force: true })
+      } catch (e) {
+        console.error('[StemSeparator IPC] Cleanup error:', e)
+      }
+    }
+  }
+
+  const myPromise = demucsQueuePromise.then(() => execute())
+  demucsQueuePromise = myPromise.catch(() => {})
+  return myPromise
+})
+
 // ─── IPC: Save/load MIDI mapping ────────────────────────────────────────────
 const mappingPath = path.join(app.getPath('userData'), 'midi-mapping.json')
 
