@@ -25,6 +25,7 @@ const makeDeckState = () => ({
   visualAngle: 0,       // physical jog angle
   duration: 0,
   cuePoint: 0,
+  pitch: 0,             // -8 to +8 (percentage)
   
   // Stems
   stemsReady: false,

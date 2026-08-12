@@ -115,9 +115,9 @@
     "cc": 24
   },
   "jog_touch_B": {
-    "type": "cc",
+    "type": "noteon",
     "channel": 0,
-    "cc": 25
+    "note": 78
   },
   "treble_B": {
     "type": "cc",

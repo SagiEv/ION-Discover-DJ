@@ -15,6 +15,7 @@ class DJController {
     this._jogTouched = { A: false, B: false }    // Jog wheel touch state
     this._scratchBaseRev = { A: false, B: false } // Track base REV state during scratch
     this._jogTimer = { A: null, B: null }        // Wheel stop detection
+    this._pitchIntervals = { A: null, B: null }  // Pitch step timers
   }
 
   init() {
@@ -196,10 +197,32 @@ class DJController {
     useAppStore.getState().updateDeck(deckId, { isReversed: deck.isReversed })
   }
 
-  // ─── Pitch bend (held buttons) ────────────────────────────────────────────
-  pitchBendDown(deckId) { this._deck(deckId).setPitchBend(0.95) }
-  pitchBendUp(deckId)   { this._deck(deckId).setPitchBend(1.05) }
-  pitchBendRelease(deckId) { this._deck(deckId).releasePitchBend() }
+  // ─── Pitch bend (held buttons act as pitch fader) ────────────────────────
+  pitchBendDown(deckId) { this._startPitchStep(deckId, -0.5) }
+  pitchBendUp(deckId)   { this._startPitchStep(deckId, 0.5) }
+  pitchBendRelease(deckId) { 
+    if (this._pitchIntervals[deckId]) {
+      clearInterval(this._pitchIntervals[deckId])
+      this._pitchIntervals[deckId] = null
+    }
+  }
+
+  _startPitchStep(deckId, step) {
+    const doStep = () => {
+      const store = useAppStore.getState()
+      const deckState = deckId === 'A' ? store.deckA : store.deckB
+      let newPitch = deckState.pitch + step
+      newPitch = Math.max(-8, Math.min(8, newPitch)) // Clamp to -8% .. +8%
+      
+      store.updateDeck(deckId, { pitch: newPitch })
+      
+      const rate = 1.0 + (newPitch / 100)
+      this._deck(deckId).setPitchRate(rate)
+    }
+    
+    doStep() // apply immediate step
+    this._pitchIntervals[deckId] = setInterval(doStep, 150) // continuous step if held
+  }
 
   // ─── Scratch mode toggle ──────────────────────────────────────────────────
   toggleScratchMode() {
@@ -221,7 +244,6 @@ class DJController {
     const deck = this._deck(deckId)
     
     // Standard relative MIDI: < 64 is forward ticks, > 64 is backward ticks (two's complement)
-    // Sometimes 1, 2, 3 forward, 127, 126 backward.
     let delta = midiValue > 64 ? midiValue - 128 : midiValue
     
     // TEMPORARY LOGGING FOR HARDWARE TESTING
@@ -237,22 +259,17 @@ class DJController {
 
     if (this._jogTimer[deckId]) {
       clearTimeout(this._jogTimer[deckId])
-    } else {
-      // First movement! Save real direction in case they aren't using the touch sensor
-      this._scratchBaseRev[deckId] = deck.isReversed
     }
 
-    const isScratching = store.scratchModeEnabled;
+    // Require both Scratch Mode AND physical touch to scratch (like Mixxx)
+    const isScratching = this._jogTouched[deckId] && store.scratchModeEnabled;
 
     // Reset rate when the wheel stops moving
     this._jogTimer[deckId] = setTimeout(() => {
       this._jogTimer[deckId] = null
-      if (this._jogTouched[deckId] && isScratching) {
+      if (isScratching) {
         if (deck.isPlaying) deck.setScratchRate(0.0) // Held record stops
       } else {
-        // Safety reset if touch release was missed or if not using touch sensor
-        const baseRev = this._scratchBaseRev[deckId] || false;
-        if (deck.isReversed !== baseRev) deck.toggleReverse();
         deck.releaseScratch() // Return to normal playback speed
       }
     }, 150)
@@ -260,33 +277,20 @@ class DJController {
     if (!isScratching) {
       // Search mode: pitch bend when playing, seek when paused
       if (deck.isPlaying) {
-        // More sensitive pitch bend for delta = 1 or 2
-        const rate = 1.0 + (delta * 0.03)
+        // Pitch bend (Nudge)
+        const rate = 1.0 + (delta * 0.015) // Gentle nudge for beatmatching
         deck.setScratchRate(Math.max(0.5, Math.min(2, rate)))
       } else {
+        // Fast search when paused
         const seekDelta = delta * 0.05
         deck.seekTo(deck.getCurrentPosition() + seekDelta)
       }
     } else {
-      // Scratch mode (Works instantly on wheel move, no touch required)
-      if (deck.isPlaying) {
-        // True scratch: speed is absolute movement
-        const speed = Math.abs(delta) * 0.8; 
-        
-        const isMovingForward = delta > 0;
-        const baseRev = this._scratchBaseRev[deckId] || false;
-        const desiredRev = isMovingForward ? baseRev : !baseRev;
-
-        if (deck.isReversed !== desiredRev) {
-          deck.toggleReverse();
-        }
-        
-        deck.setScratchRate(Math.min(3, speed));
-      } else {
-        // Simulate scratch while paused: seek
-        const nudge = delta * 0.01
-        deck.seekTo(deck.getCurrentPosition() + nudge)
-      }
+      // Scratch mode
+      // Mixxx uses direct audio buffer scrubbing (engine.scratchTick)
+      // Physical delta is directly applied to position
+      const scratchDelta = delta * 0.02; // Sensitivity for scratching
+      deck.seekTo(deck.getCurrentPosition() + scratchDelta);
     }
   }
 

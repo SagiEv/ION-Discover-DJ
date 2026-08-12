@@ -167,9 +167,21 @@ export function DeckPanel({ deckId }) {
           {deckState.track && (
             <>
               <div className="deck__artist">{deckState.track.path?.split(/[\\/]/).at(-2) ?? ''}</div>
-              <div className="deck__bpm">
-                BPM <span>{deckState.bpm || '—'}</span>
-                {deckState.isReversed && <span style={{ color: '#ef4444', marginLeft: 8 }}>◀ REV</span>}
+              <div className="deck__bpm" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div>BPM <span>{deckState.bpm || '—'}</span></div>
+                
+                <div style={{ 
+                  display: 'flex', alignItems: 'center', gap: '4px', 
+                  background: 'rgba(255,255,255,0.05)', padding: '2px 8px', 
+                  borderRadius: '12px', fontSize: '11px', color: 'var(--text-muted)' 
+                }}>
+                  <span style={{ fontWeight: 600, color: deckState.pitch !== 0 ? 'var(--accent-a)' : 'inherit' }}>
+                    {deckState.pitch > 0 ? '+' : ''}{deckState.pitch.toFixed(1)}%
+                  </span>
+                  <span style={{ fontSize: '9px', opacity: 0.7 }}>PITCH</span>
+                </div>
+                
+                {deckState.isReversed && <span style={{ color: '#ef4444' }}>◀ REV</span>}
               </div>
             </>
           )}
