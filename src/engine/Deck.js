@@ -416,7 +416,7 @@ export class Deck {
     const now = this.ctx.currentTime
     nodes.forEach(n => {
       n.playbackRate.cancelScheduledValues(now)
-      n.playbackRate.value = rate
+      n.playbackRate.setTargetAtTime(rate, now, 0.005)  // 5ms smoothing — prevents clicks
     })
   }
 
@@ -428,7 +428,8 @@ export class Deck {
     const now = this.ctx.currentTime
     nodes.forEach(n => {
       n.playbackRate.cancelScheduledValues(now)
-      n.playbackRate.value = 0.0
+      n.playbackRate.setValueAtTime(n.playbackRate.value, now)
+      n.playbackRate.linearRampToValueAtTime(0.001, now + 0.08) // 80ms vinyl deceleration
     })
   }
 
@@ -439,7 +440,8 @@ export class Deck {
     const now = this.ctx.currentTime
     nodes.forEach(n => {
       n.playbackRate.cancelScheduledValues(now)
-      n.playbackRate.value = this.pitchRate
+      n.playbackRate.setValueAtTime(n.playbackRate.value, now)
+      n.playbackRate.setTargetAtTime(this.pitchRate, now, 0.05) // 50ms smooth return
     })
   }
 

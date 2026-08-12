@@ -16,6 +16,8 @@ class DJController {
     this._scratchBaseRev = { A: false, B: false } // Track base REV state during scratch
     this._jogTimer = { A: null, B: null }        // Wheel stop detection
     this._pitchIntervals = { A: null, B: null }  // Pitch step timers
+    this._jogLastTime = { A: 0, B: 0 }           // Last jog event timestamp (ms)
+    this._jogVelocity = { A: 0, B: 0 }           // Smoothed velocity (ticks/sec)
   }
 
   init() {
@@ -252,17 +254,7 @@ class DJController {
     const deckState = store[deckId === 'A' ? 'deckA' : 'deckB']
     
     if (deckState.pitchLockRate !== null) {
-      if (Date.now() - (deckState.pitchLockTimestamp || 0) < 5000) {
-        return;
-      } else {
-        // Only unlock if they purposely move it (ignore physical platter jitter)
-        let deltaCheck = midiValue > 64 ? midiValue - 128 : midiValue
-        if (Math.abs(deltaCheck) > 2) {
-          this.unlockScratchRate(deckId);
-        } else {
-          return; // Ignore tiny vibrations!
-        }
-      }
+      return;  // Locked — ignore ALL jog input. Only UI button can unlock.
     }
     
     // Standard relative MIDI: < 64 is forward ticks, > 64 is backward ticks (two's complement)
@@ -300,11 +292,19 @@ class DJController {
         return;
       }
       
+      // Always restore reverse direction before braking/releasing
+      // This prevents isReversed from getting stuck if onJogRelease fires late
+      const baseRev = this._scratchBaseRev[deckId] || false;
+      if (deck.isReversed !== baseRev) {
+        deck.toggleReverse();
+        storeState.updateDeck(deckId, { isReversed: baseRev });
+      }
+      
       if (currentlyScratching) {
         if (deck.isPlaying) deck.brakeScratch() // Platter inertia stop
       } else {
         deck.releaseScratch() // Return to normal playback speed
-        store.updateDeck(deckId, { liveRate: 1.0 })
+        storeState.updateDeck(deckId, { liveRate: 1.0 })
       }
     }, 45) // Reduced from 150ms to 45ms for extremely tight scratch response
 
@@ -326,54 +326,86 @@ class DJController {
           this._lastLiveRateUpdate[deckId] = now
         }
       } else {
-        // Fast search when paused
-        const seekDelta = delta * 0.05
-        deck.seekTo(deck.getCurrentPosition() + seekDelta)
+        // Paused seek — velocity-aware
+        const nowSeek = performance.now()
+        const dtSeek = (nowSeek - (this._jogLastTime[deckId] || nowSeek)) / 1000
+        this._jogLastTime[deckId] = nowSeek
+
+        const instantVelSeek = dtSeek > 0 ? Math.abs(delta) / dtSeek : 0
+        this._jogVelocity[deckId] = this._jogVelocity[deckId] * 0.3 + instantVelSeek * 0.7
+
+        const velSeek = this._jogVelocity[deckId]
+        const normVelSeek = Math.min(velSeek / 80, 1.0)
+
+        // Slow: 50ms/tick, Fast: up to 5 seconds/tick
+        const seekAmount = (0.05 + normVelSeek * normVelSeek * 4.95) * Math.sign(delta)
+        deck.seekTo(deck.getCurrentPosition() + seekAmount)
       }
     } else {
-      // Scratch mode
+      // Scratch mode — velocity-aware
       if (deck.isPlaying) {
-        // Use playbackRate to scrub audio naturally without timeline jumps
-        const targetRate = delta * 0.2; // Sensitivity for scratching
-        const isBackward = targetRate < 0;
-        const absRate = Math.abs(targetRate);
-        
-        // Compare with base direction to decide if we need to flip the buffer
-        const baseRev = this._scratchBaseRev[deckId] || false;
-        const shouldBeReversed = isBackward ? !baseRev : baseRev;
-        
+        const nowScratch = performance.now()
+        const dtScratch = (nowScratch - (this._jogLastTime[deckId] || nowScratch)) / 1000
+        this._jogLastTime[deckId] = nowScratch
+
+        // Compute velocity: ticks per second, smoothed with previous
+        const instantVel = dtScratch > 0 ? Math.abs(delta) / dtScratch : 0
+        this._jogVelocity[deckId] = this._jogVelocity[deckId] * 0.3 + instantVel * 0.7
+
+        // Non-linear mapping: quadratic for natural "vinyl" feel
+        const velocity = this._jogVelocity[deckId]
+        const normalizedVel = Math.min(velocity / 80, 1.0)  // 80 ticks/sec = max
+        const curvedRate = 0.05 + normalizedVel * normalizedVel * 7.95  // 0.05x → 8.0x
+
+        // Direction handling (reverse buffer swap)
+        const isBackward = delta < 0
+        const baseRev = this._scratchBaseRev[deckId] || false
+        const shouldBeReversed = isBackward ? !baseRev : baseRev
+
         if (deck.isReversed !== shouldBeReversed) {
-          const now = Date.now();
-          if (!this._lastReverseTime) this._lastReverseTime = {};
-          if (now - (this._lastReverseTime[deckId] || 0) > 40) {
-            deck.toggleReverse();
-            this._lastReverseTime[deckId] = now;
+          const now2 = Date.now()
+          if (!this._lastReverseTime) this._lastReverseTime = {}
+          if (now2 - (this._lastReverseTime[deckId] || 0) > 40) {
+            deck.toggleReverse()
+            this._lastReverseTime[deckId] = now2
           }
         }
-        
-        deck.setScratchRate(Math.max(0.01, Math.min(16, absRate)));
+
+        deck.setScratchRate(Math.max(0.01, Math.min(8, curvedRate)))
       } else {
-        // Fast seek when paused
-        const seekDelta = delta * 0.05;
-        deck.seekTo(deck.getCurrentPosition() + seekDelta);
+        // Paused seek — velocity-aware (same as non-scratch paused seek)
+        const nowSeek2 = performance.now()
+        const dtSeek2 = (nowSeek2 - (this._jogLastTime[deckId] || nowSeek2)) / 1000
+        this._jogLastTime[deckId] = nowSeek2
+
+        const instantVelSeek2 = dtSeek2 > 0 ? Math.abs(delta) / dtSeek2 : 0
+        this._jogVelocity[deckId] = this._jogVelocity[deckId] * 0.3 + instantVelSeek2 * 0.7
+
+        const velSeek2 = this._jogVelocity[deckId]
+        const normVelSeek2 = Math.min(velSeek2 / 80, 1.0)
+        const seekAmount2 = (0.05 + normVelSeek2 * normVelSeek2 * 4.95) * Math.sign(delta)
+        deck.seekTo(deck.getCurrentPosition() + seekAmount2)
       }
     }
   }
 
   onJogTouch(deckId) {
-    this._jogTouched[deckId] = true
     const deck = this._deck(deckId)
     deck.isJogTouched = true
-    this._scratchBaseRev[deckId] = deck.isReversed // Save real direction
+    
+    // Only capture base reverse state on fresh touch (not already touching)
+    // Prevents compounding: if a previous scratch left isReversed=true,
+    // a new touch would capture the wrong "base" state
+    if (!this._jogTouched[deckId]) {
+      this._scratchBaseRev[deckId] = deck.isReversed
+    }
+    this._jogTouched[deckId] = true
+    
     const store = useAppStore.getState()
     const deckState = store[deckId === 'A' ? 'deckA' : 'deckB']
 
     if (deckState.pitchLockRate !== null) {
-      if (Date.now() - (deckState.pitchLockTimestamp || 0) < 5000) {
-        return; // Ignore touch during protection window
-      } else {
-        this.unlockScratchRate(deckId);
-      }
+      return;  // Locked — ignore touch. Only UI button can unlock.
     }
 
     if (store.scratchModeEnabled) {
@@ -403,6 +435,7 @@ class DJController {
     const baseRev = this._scratchBaseRev[deckId] || false;
     if (deck.isReversed !== baseRev) {
       deck.toggleReverse()
+      useAppStore.getState().updateDeck(deckId, { isReversed: baseRev })
     }
     deck.releaseScratch()
     useAppStore.getState().updateDeck(deckId, { liveRate: 1.0 })
@@ -413,28 +446,42 @@ class DJController {
     const deck = this._deck(deckId)
     const store = useAppStore.getState()
     
-    let rateToLock = deck._currentPlaybackRate;
-    // Recover the fast speed if they were just spinning it within the last 2 seconds!
-    if (deck._lastActiveScratchRate && Date.now() - (deck._lastActiveScratchTime || 0) < 2000) {
-      rateToLock = deck._lastActiveScratchRate;
+    if (!deck.isPlaying) return
+    
+    // Robust rate capture — priority order:
+    // 1) Last active scratch rate (the speed the user actually saw — no expiry)
+    // 2) Current playback rate (if meaningful, i.e. not braked to ~0)
+    // 3) Pitch rate (base speed — always valid fallback)
+    let rateToLock = deck.pitchRate  // safe fallback
+    
+    if (deck._lastActiveScratchRate && deck._lastActiveScratchRate > 0.01) {
+      rateToLock = deck._lastActiveScratchRate
+    } else if (deck._currentPlaybackRate && deck._currentPlaybackRate > 0.01) {
+      rateToLock = deck._currentPlaybackRate
     }
     
-    if (deck.isPlaying && rateToLock !== undefined) {
-      deck.setScratchRate(rateToLock); // Force audio node back to the locked speed
-      
-      store.updateDeck(deckId, {
-        pitchLockRate: rateToLock,
-        pitchLockTimestamp: Date.now(),
-        liveRate: rateToLock / deck.pitchRate // Update UI to reflect the recovered speed
-      })
+    deck.setScratchRate(rateToLock)
+    
+    // Drain jog velocity so it doesn't carry into next unlocked session
+    this._jogVelocity[deckId] = 0
+    
+    // Clear any pending wheel-stop timers that would brake/release
+    if (this._jogTimer[deckId]) {
+      clearTimeout(this._jogTimer[deckId])
+      this._jogTimer[deckId] = null
     }
+    
+    store.updateDeck(deckId, {
+      pitchLockRate: rateToLock,
+      liveRate: rateToLock / deck.pitchRate
+    })
   }
 
   unlockScratchRate(deckId) {
     const store = useAppStore.getState()
     store.updateDeck(deckId, {
       pitchLockRate: null,
-      pitchLockTimestamp: null
+      liveRate: 1.0
     })
     const deck = this._deck(deckId)
     if (deck.isPlaying) {
