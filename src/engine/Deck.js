@@ -20,6 +20,20 @@ export class Deck {
     this.originalBuffer = null
     this.reversedBuffer = null
     this.sourceNode = null
+    
+    // Stem buffers and nodes
+    this.vocalsBuffer = null
+    this.drumsBuffer = null
+    this.bassBuffer = null
+    this.otherBuffer = null
+    this.vocalsSourceNode = null
+    this.drumsSourceNode = null
+    this.bassSourceNode = null
+    this.otherSourceNode = null
+    this.stemsReady = false
+    this.vocalsMuted = false
+    this.instrumentalsMuted = false
+    this.granularStemsMuted = { drums: false, bass: false, other: false }
 
     this.isPlaying = false
     this.isReversed = false
@@ -44,6 +58,22 @@ export class Deck {
     this.onPositionUpdate = null
 
     // ─── Build audio graph ─────────────────────────────────────────────────
+    // Pre-gains for mixing stems
+    this.masterPreGain = this.ctx.createGain()
+    this.masterPreGain.gain.value = 1.0
+    
+    this.vocalsPreGain = this.ctx.createGain()
+    this.vocalsPreGain.gain.value = 0.0 // Muted until stems are ready
+    
+    this.drumsPreGain = this.ctx.createGain()
+    this.drumsPreGain.gain.value = 0.0
+    
+    this.bassPreGain = this.ctx.createGain()
+    this.bassPreGain.gain.value = 0.0
+    
+    this.otherPreGain = this.ctx.createGain()
+    this.otherPreGain.gain.value = 0.0
+
     this.trebleFilter = this.ctx.createBiquadFilter()
     this.trebleFilter.type = 'highshelf'
     this.trebleFilter.frequency.value = 10000
@@ -60,7 +90,13 @@ export class Deck {
 
     this.fxChain = new FXChain(this.ctx)
 
-    // Chain: treble → bass → volume → fxChain → crossfaderSend
+    // Chain: preGains → treble → bass → volume → fxChain → crossfaderSend
+    this.masterPreGain.connect(this.trebleFilter)
+    this.vocalsPreGain.connect(this.trebleFilter)
+    this.drumsPreGain.connect(this.trebleFilter)
+    this.bassPreGain.connect(this.trebleFilter)
+    this.otherPreGain.connect(this.trebleFilter)
+    
     this.trebleFilter.connect(this.bassFilter)
     this.bassFilter.connect(this.volumeGain)
     this.volumeGain.connect(this.fxChain.inputNode)
@@ -89,12 +125,78 @@ export class Deck {
     this.stop()
     this.originalBuffer = buffer
     this.reversedBuffer = null // computed lazily on first REV use
+    
+    this.vocalsBuffer = null
+    this.drumsBuffer = null
+    this.bassBuffer = null
+    this.otherBuffer = null
+    this.stemsReady = false
+    this.masterPreGain.gain.setTargetAtTime(1.0, this.ctx.currentTime, 0.05)
+    this.vocalsPreGain.gain.setTargetAtTime(0.0, this.ctx.currentTime, 0.05)
+    this.drumsPreGain.gain.setTargetAtTime(0.0, this.ctx.currentTime, 0.05)
+    this.bassPreGain.gain.setTargetAtTime(0.0, this.ctx.currentTime, 0.05)
+    this.otherPreGain.gain.setTargetAtTime(0.0, this.ctx.currentTime, 0.05)
+    
     this.duration = buffer.duration
     this._pauseOffset = 0
     this.cuePoint = 0
     this.isReversed = false
     this.isPlaying = false
     this._stopPositionTimer()
+  }
+
+  // ─── Load Stems ─────────────────────────────────────────────────────────────
+  loadStems(vocalsBuf, drumsBuf, bassBuf, otherBuf) {
+    this.vocalsBuffer = vocalsBuf
+    this.drumsBuffer = drumsBuf
+    this.bassBuffer = bassBuf
+    this.otherBuffer = otherBuf
+    this.stemsReady = true
+    
+    const wasPlaying = this.isPlaying
+    const pos = this.getCurrentPosition()
+    
+    if (wasPlaying) {
+      this.play(pos) // This will restart playback with all stems
+    }
+    this._updateStemMix()
+  }
+  
+  _updateStemMix() {
+    const t = this.ctx.currentTime
+    if (this.stemsReady) {
+      this.masterPreGain.gain.setTargetAtTime(0.0, t, 0.05)
+      this.vocalsPreGain.gain.setTargetAtTime(this.vocalsMuted ? 0.0 : 1.0, t, 0.05)
+      
+      const drumsGain = this.instrumentalsMuted || this.granularStemsMuted.drums ? 0.0 : 1.0
+      const bassGain = this.instrumentalsMuted || this.granularStemsMuted.bass ? 0.0 : 1.0
+      const otherGain = this.instrumentalsMuted || this.granularStemsMuted.other ? 0.0 : 1.0
+      
+      this.drumsPreGain.gain.setTargetAtTime(drumsGain, t, 0.05)
+      this.bassPreGain.gain.setTargetAtTime(bassGain, t, 0.05)
+      this.otherPreGain.gain.setTargetAtTime(otherGain, t, 0.05)
+    } else {
+      this.masterPreGain.gain.setTargetAtTime(1.0, t, 0.05)
+      this.vocalsPreGain.gain.setTargetAtTime(0.0, t, 0.05)
+      this.drumsPreGain.gain.setTargetAtTime(0.0, t, 0.05)
+      this.bassPreGain.gain.setTargetAtTime(0.0, t, 0.05)
+      this.otherPreGain.gain.setTargetAtTime(0.0, t, 0.05)
+    }
+  }
+
+  setVocalsMute(muted) {
+    this.vocalsMuted = muted
+    this._updateStemMix()
+  }
+
+  setInstrumentalsMute(muted) {
+    this.instrumentalsMuted = muted
+    this._updateStemMix()
+  }
+
+  setGranularStemsMuted(stemsMuted) {
+    this.granularStemsMuted = { ...stemsMuted }
+    this._updateStemMix()
   }
 
   // ─── Create reversed buffer lazily ─────────────────────────────────────────
@@ -114,40 +216,66 @@ export class Deck {
   }
 
   // ─── Internal: create and connect a source node ─────────────────────────────
-  _createSource(buffer) {
-    if (this.sourceNode) {
-      this.sourceNode.onended = null
-      try { this.sourceNode.stop() } catch {}
-      this.sourceNode.disconnect()
-    }
+  _createSource(buffer, destination, onEndedCb = null) {
     const src = this.ctx.createBufferSource()
     src.buffer = buffer
-    src.connect(this.trebleFilter)
-    src.onended = () => {
+    src.connect(destination)
+    if (onEndedCb) src.onended = onEndedCb
+    return src
+  }
+  
+  _stopAllSources() {
+    const nodes = [this.sourceNode, this.vocalsSourceNode, this.drumsSourceNode, this.bassSourceNode, this.otherSourceNode]
+    nodes.forEach(n => {
+      if (n) {
+        n.onended = null
+        try { n.stop() } catch {}
+        n.disconnect()
+      }
+    })
+    this.sourceNode = null
+    this.vocalsSourceNode = null
+    this.drumsSourceNode = null
+    this.bassSourceNode = null
+    this.otherSourceNode = null
+  }
+
+  // ─── Play from a given offset ────────────────────────────────────────────────
+  play(offset = null) {
+    if (!this.originalBuffer) return
+    this._stopAllSources()
+
+    const startFrom = offset !== null
+      ? (this.isReversed ? this.duration - offset : offset)
+      : (this.isReversed ? this.duration - this._pauseOffset : this._pauseOffset)
+
+    const onMasterEnded = () => {
       if (this.isPlaying) {
         this.isPlaying = false
         this._stopPositionTimer()
         if (this.onEnded) this.onEnded(this.id)
       }
     }
-    this.sourceNode = src
-    return src
-  }
 
-  // ─── Play from a given offset ────────────────────────────────────────────────
-  play(offset = null) {
-    if (!this.originalBuffer) return
     const buf = this.isReversed ? this._getReversedBuffer() : this.originalBuffer
+    this.sourceNode = this._createSource(buf, this.masterPreGain, onMasterEnded)
+    
+    if (this.stemsReady) {
+       this.vocalsSourceNode = this._createSource(this.vocalsBuffer, this.vocalsPreGain)
+       this.drumsSourceNode = this._createSource(this.drumsBuffer, this.drumsPreGain)
+       this.bassSourceNode = this._createSource(this.bassBuffer, this.bassPreGain)
+       this.otherSourceNode = this._createSource(this.otherBuffer, this.otherPreGain)
+    }
 
-    const startFrom = offset !== null
-      ? (this.isReversed ? this.duration - offset : offset)
-      : (this.isReversed ? this.duration - this._pauseOffset : this._pauseOffset)
-
-    const src = this._createSource(buf)
-    src.playbackRate.value = this.pitchRate
+    const activeNodes = [this.sourceNode, this.vocalsSourceNode, this.drumsSourceNode, this.bassSourceNode, this.otherSourceNode].filter(Boolean)
+    
     this._startOffset = startFrom // offset into the buffer currently being played
 
-    src.start(0, Math.max(0, startFrom))
+    activeNodes.forEach(src => {
+      src.playbackRate.value = this.pitchRate
+      src.start(0, Math.max(0, startFrom))
+    })
+
     this._startTime = this.ctx.currentTime
     this.isPlaying = true
     this._startPositionTimer()
@@ -158,17 +286,14 @@ export class Deck {
     if (!this.isPlaying) return
     this._pauseOffset = this.getCurrentPosition()
     this.cuePoint = this._pauseOffset  // PAUSE always sets the cue point
-    try { this.sourceNode?.stop() } catch {}
+    this._stopAllSources()
     this.isPlaying = false
     this._stopPositionTimer()
   }
 
   // ─── Stop (reset to beginning) ───────────────────────────────────────────────
   stop() {
-    if (this.sourceNode) {
-      this.sourceNode.onended = null
-      try { this.sourceNode.stop() } catch {}
-    }
+    this._stopAllSources()
     this.isPlaying = false
     this._pauseOffset = 0
     this._stopPositionTimer()
@@ -178,7 +303,7 @@ export class Deck {
   stutter() {
     const pos = this.getCurrentPosition()
     if (this.isPlaying) {
-      try { this.sourceNode?.stop() } catch {}
+      this._stopAllSources()
     }
     this.play(pos)
   }
@@ -187,7 +312,7 @@ export class Deck {
     const wasPlaying = this.isPlaying
     const pos = Math.max(0, Math.min(seconds, this.duration))
     if (wasPlaying) {
-      try { this.sourceNode?.stop() } catch {}
+      this._stopAllSources()
     }
     this._pauseOffset = pos
     
@@ -202,7 +327,7 @@ export class Deck {
   jumpToCue() {
     const wasPlaying = this.isPlaying
     if (wasPlaying) {
-      try { this.sourceNode?.stop() } catch {}
+      this._stopAllSources()
     }
     this._pauseOffset = this.cuePoint
     if (wasPlaying) this.play(this.cuePoint)
@@ -226,7 +351,7 @@ export class Deck {
     const pos = this.getCurrentPosition()
     const wasPlaying = this.isPlaying
     if (wasPlaying) {
-      try { this.sourceNode?.stop() } catch {}
+      this._stopAllSources()
     }
     this.isReversed = !this.isReversed
     this._pauseOffset = pos
@@ -235,41 +360,52 @@ export class Deck {
 
   // ─── Scratch: set playback rate (called from jog wheel) ─────────────────────
   setScratchRate(rate) {
-    if (!this.sourceNode || !this.isPlaying) return
-    this.sourceNode.playbackRate.setTargetAtTime(
-      rate, this.ctx.currentTime, 0.01
-    )
+    if (!this.isPlaying) return
+    const nodes = [this.sourceNode, this.vocalsSourceNode, this.drumsSourceNode, this.bassSourceNode, this.otherSourceNode].filter(Boolean)
+    nodes.forEach(n => {
+      n.playbackRate.setTargetAtTime(rate, this.ctx.currentTime, 0.01)
+    })
   }
 
   releaseScratch() {
-    if (!this.sourceNode) return
-    this.sourceNode.playbackRate.setTargetAtTime(this.pitchRate, this.ctx.currentTime, 0.05)
+    const nodes = [this.sourceNode, this.vocalsSourceNode, this.drumsSourceNode, this.bassSourceNode, this.otherSourceNode].filter(Boolean)
+    nodes.forEach(n => {
+      n.playbackRate.setTargetAtTime(this.pitchRate, this.ctx.currentTime, 0.05)
+    })
   }
 
   // ─── Pitch bend (momentary) ──────────────────────────────────────────────────
   setPitchBend(factor) {
-    // factor: 1.05 for +%, 0.95 for -%
-    if (!this.sourceNode) return
-    this.sourceNode.playbackRate.setTargetAtTime(this.pitchRate * factor, this.ctx.currentTime, 0.02)
+    const nodes = [this.sourceNode, this.vocalsSourceNode, this.drumsSourceNode, this.bassSourceNode, this.otherSourceNode].filter(Boolean)
+    nodes.forEach(n => {
+      n.playbackRate.setTargetAtTime(this.pitchRate * factor, this.ctx.currentTime, 0.02)
+    })
   }
 
   releasePitchBend() {
-    if (!this.sourceNode) return
-    this.sourceNode.playbackRate.setTargetAtTime(this.pitchRate, this.ctx.currentTime, 0.05)
+    const nodes = [this.sourceNode, this.vocalsSourceNode, this.drumsSourceNode, this.bassSourceNode, this.otherSourceNode].filter(Boolean)
+    nodes.forEach(n => {
+      n.playbackRate.setTargetAtTime(this.pitchRate, this.ctx.currentTime, 0.05)
+    })
   }
 
   // ─── Pitch slider (continuous) ───────────────────────────────────────────────
   setPitchRate(rate) {
     this.pitchRate = rate
-    if (!this.sourceNode) return
-    this.sourceNode.playbackRate.setTargetAtTime(rate, this.ctx.currentTime, 0.05)
+    const nodes = [this.sourceNode, this.vocalsSourceNode, this.drumsSourceNode, this.bassSourceNode, this.otherSourceNode].filter(Boolean)
+    nodes.forEach(n => {
+      n.playbackRate.setTargetAtTime(rate, this.ctx.currentTime, 0.05)
+    })
   }
 
   // ─── Sync: set playback rate to match a target BPM ──────────────────────────
   syncToBpm(targetBpm) {
-    if (!this.bpm || !targetBpm || !this.sourceNode) return
+    if (!this.bpm || !targetBpm) return
     const ratio = targetBpm / this.bpm
-    this.sourceNode.playbackRate.setTargetAtTime(ratio, this.ctx.currentTime, 0.05)
+    const nodes = [this.sourceNode, this.vocalsSourceNode, this.drumsSourceNode, this.bassSourceNode, this.otherSourceNode].filter(Boolean)
+    nodes.forEach(n => {
+      n.playbackRate.setTargetAtTime(ratio, this.ctx.currentTime, 0.05)
+    })
     // The effective BPM changes, so update FX
     this.fxChain.setBpm(targetBpm)
   }
@@ -336,6 +472,11 @@ export class Deck {
 
   dispose() {
     this.stop()
+    this.masterPreGain.disconnect()
+    this.vocalsPreGain.disconnect()
+    this.drumsPreGain.disconnect()
+    this.bassPreGain.disconnect()
+    this.otherPreGain.disconnect()
     this.trebleFilter.disconnect()
     this.bassFilter.disconnect()
     this.volumeGain.disconnect()

@@ -1,6 +1,7 @@
 import { getAudioEngine } from '../engine/AudioEngine.js'
 import { computeWaveform } from '../engine/WaveformAnalyzer.js'
 import { useAppStore } from '../store/appStore.js'
+import { processStems } from '../engine/StemSeparator.js'
 
 /**
  * DJController — the bridge between MIDI events / UI interactions
@@ -55,8 +56,19 @@ class DJController {
     const deck = deckId === 'A' ? this.engine.deckA : this.engine.deckB
     deck.bpm = bpm
 
+    const hashString = (str) => {
+      let hash = 0;
+      for (let i = 0; i < str.length; i++) {
+        hash = (hash << 5) - hash + str.charCodeAt(i);
+        hash |= 0; // Convert to 32bit integer
+      }
+      return Math.abs(hash).toString(36);
+    };
+    const safePath = trackInfo.path ? `local_${hashString(trackInfo.path.toLowerCase().replace(/\\/g, '/'))}` : null;
+    let trackId = trackInfo.videoId || safePath;
+
     useAppStore.getState().updateDeck(deckId, {
-      track: { ...trackInfo, waveform, bpm },
+      track: { ...trackInfo, waveform, bpm, stemTrackId: trackId },
       isPlaying: false,
       position: 0,
       duration: audioBuffer.duration,
@@ -64,8 +76,22 @@ class DJController {
       isReversed: false,
       bpm,
       lyrics: null, // Reset lyrics on load
-      showLyrics: false
+      showLyrics: false,
+      stemsReady: false,
+      stemsFailed: false,
+      stemsProgress: '',
+      vocalsMuted: false,
+      instrumentalsMuted: false
     })
+
+    // Check if stems already exist
+    const stemsExist = await window.electronAPI.checkStems(trackId)
+    if (stemsExist) {
+      this.loadStemsFromDisk(deckId, trackId)
+    } else {
+      // Kick off background stem processing immediately when loaded (prioritized)
+      useAppStore.getState().queueStemProcessAsync({ ...trackInfo, path: trackInfo.path, stemTrackId: trackId }, true)
+    }
 
     if (trackInfo.videoId || trackInfo.path) {
       try {
@@ -93,6 +119,21 @@ class DJController {
   }
 
   // ─── Play / Pause Toggle ───────────────────────────────────────────────────
+  async loadStemsFromDisk(deckId, trackId) {
+    const deck = deckId === 'A' ? this.engine.deckA : this.engine.deckB
+    if (!deck.originalBuffer) return
+
+    try {
+      // Just call processStems with the trackId. Since they are already on disk, it will instantly load them.
+      const { vocalsBuffer, drumsBuffer, bassBuffer, otherBuffer } = await processStems(deck.originalBuffer, this.engine, trackId)
+      deck.loadStems(vocalsBuffer, drumsBuffer, bassBuffer, otherBuffer)
+      useAppStore.getState().updateDeck(deckId, { stemsReady: true })
+    } catch (err) {
+      console.error('[DJController] Stem loading failed:', err)
+      useAppStore.getState().updateDeck(deckId, { stemsFailed: true })
+    }
+  }
+
   togglePlay(deckId) {
     const deck = this._deck(deckId)
     if (!deck.originalBuffer) return
@@ -272,6 +313,66 @@ class DJController {
       deck.toggleReverse()
     }
     deck.releaseScratch()
+  }
+
+  // ─── Stems ────────────────────────────────────────────────────────────────
+  toggleVocals(deckId) {
+    const deck = this._deck(deckId)
+    const store = useAppStore.getState()
+    const deckKey = deckId === 'A' ? 'deckA' : 'deckB'
+    const newMuted = !store[deckKey].vocalsMuted
+    deck.setVocalsMute(newMuted)
+    store.updateDeck(deckId, { vocalsMuted: newMuted })
+  }
+
+  toggleInstrumentals(deckId) {
+    const deck = this._deck(deckId)
+    const store = useAppStore.getState()
+    const deckKey = deckId === 'A' ? 'deckA' : 'deckB'
+    const newMuted = !store[deckKey].instrumentalsMuted
+    deck.setInstrumentalsMute(newMuted)
+    store.updateDeck(deckId, { instrumentalsMuted: newMuted })
+  }
+
+  toggleGranularStemMode(deckId) {
+    const store = useAppStore.getState()
+    const deckKey = deckId === 'A' ? 'deckA' : 'deckB'
+    const newMode = store[deckKey].granularStemMode === 'solo' ? 'mute' : 'solo'
+    store.updateDeck(deckId, { granularStemMode: newMode })
+  }
+
+  toggleGranularStem(deckId, stemType) {
+    const store = useAppStore.getState()
+    const deckKey = deckId === 'A' ? 'deckA' : 'deckB'
+    const deckState = store[deckKey]
+    const mode = deckState.granularStemMode
+    const deck = this._deck(deckId)
+    
+    let newMutedState = { ...deckState.granularStemsMuted }
+
+    if (mode === 'solo') {
+      const allUnmuted = !newMutedState.drums && !newMutedState.bass && !newMutedState.other
+      if (allUnmuted) {
+        newMutedState.drums = stemType !== 'drums'
+        newMutedState.bass = stemType !== 'bass'
+        newMutedState.other = stemType !== 'other'
+      } else {
+        newMutedState[stemType] = !newMutedState[stemType]
+        
+        // If toggling this stem leaves all stems muted, reset to all unmuted (exit solo mode)
+        if (newMutedState.drums && newMutedState.bass && newMutedState.other) {
+          newMutedState.drums = false
+          newMutedState.bass = false
+          newMutedState.other = false
+        }
+      }
+    } else {
+      // Mute mode (Subtract)
+      newMutedState[stemType] = !newMutedState[stemType]
+    }
+    
+    deck.setGranularStemsMuted(newMutedState)
+    store.updateDeck(deckId, { granularStemsMuted: newMutedState })
   }
 
   // ─── EQ / Volume ──────────────────────────────────────────────────────────
