@@ -6,6 +6,7 @@ import { ControllerSurface } from './components/ControllerSurface.jsx'
 import { MidiLearnModal, useMidi } from './components/MidiLayer.jsx'
 import { useStemOrchestrator } from './components/useStemOrchestrator.jsx'
 import { StemQueueModal } from './components/StemQueueModal.jsx'
+import { ToastContainer } from './components/Toast.jsx'
 import './index.css'
 
 function TitleBar({ onOpenMidi, setShowStemQueue }) {
@@ -128,14 +129,20 @@ export default function App() {
   // Load default library on mount
   const addTracks = useAppStore(s => s.addTracks)
   useEffect(() => {
-    window.electronAPI.loadDefaultLibrary().then(paths => {
-      if (paths && paths.length > 0) {
-        const tracks = paths.map(p => ({
-          path: p,
-          name: p.split(/[\\/]/).pop().replace(/\.[^.]+$/, ''),
-          duration: 0,
-          bpm: 0,
-        }))
+    window.electronAPI.loadDefaultLibrary().then(items => {
+      if (items && items.length > 0) {
+        const tracks = items.map(item => {
+          // Handle both old format (plain path string) and new format ({path, videoId})
+          const p = typeof item === 'string' ? item : item.path
+          const videoId = typeof item === 'object' ? item.videoId : undefined
+          return {
+            path: p,
+            name: p.split(/[\\/]/).pop().replace(/\.[^.]+$/, ''),
+            videoId: videoId || undefined,
+            duration: 0,
+            bpm: 0,
+          }
+        })
         addTracks(tracks)
       }
     }).catch(e => console.error('Failed to load default library:', e))
@@ -155,6 +162,7 @@ export default function App() {
 
       {showMidi && <MidiLearnModal onClose={() => setShowMidi(false)} />}
       {showStemQueue && <StemQueueModal onClose={() => setShowStemQueue(false)} />}
+      <ToastContainer />
     </div>
   )
 }

@@ -15,6 +15,7 @@ export function TrackBrowser() {
   const setBrowseIndex = useAppStore(s => s.setBrowseIndex)
   const addTracks = useAppStore(s => s.addTracks)
   const addToQueue = useAppStore(s => s.addToQueue)
+  const addToast = useAppStore(s => s.addToast)
   const dj = getDJController()
   const [isDownloading, setIsDownloading] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
@@ -22,6 +23,15 @@ export function TrackBrowser() {
   const [showDropdown, setShowDropdown] = useState(false)
   const [activeIndex, setActiveIndex] = useState(-1)
   const debounceTimer = useRef(null)
+  const itemRefs = useRef({})
+
+  // Auto-scroll selected item into view when browseIndex changes (e.g. from MIDI browse wheel)
+  useEffect(() => {
+    const el = itemRefs.current[browseIndex]
+    if (el) {
+      el.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+    }
+  }, [browseIndex])
 
   useEffect(() => {
     if (!searchQuery.trim()) {
@@ -55,6 +65,10 @@ export function TrackBrowser() {
     setShowDropdown(false)
     setSearchQuery(query)
     setIsDownloading(true)
+
+    // Notify download start
+    addToast(`Downloading: ${query}...`, 'info', 6000)
+
     try {
       const trackInfo = await window.electronAPI.searchYouTube(query)
       addTracks([{
@@ -66,12 +80,16 @@ export function TrackBrowser() {
       }])
       setBrowseIndex(library.length)
       setSearchQuery('')
+
+      // Notify download complete
+      addToast(`Downloaded: ${trackInfo.name}`, 'success', 4000)
     } catch (e) {
-      alert('Failed to download from YouTube: ' + e.message)
+      // Use toast instead of blocking alert() — prevents search box from locking
+      addToast('YouTube download failed: ' + (e.message || 'Unknown error'), 'error', 6000)
     } finally {
       setIsDownloading(false)
     }
-  }, [searchQuery, library.length, addTracks, setBrowseIndex])
+  }, [searchQuery, library.length, addTracks, setBrowseIndex, addToast])
 
   const openFiles = useCallback(async () => {
     const paths = await window.electronAPI.openAudioFiles()
@@ -178,6 +196,7 @@ export function TrackBrowser() {
           library.map((track, i) => (
             <div
               key={track.path}
+              ref={el => { itemRefs.current[i] = el }}
               className={`browser__item${i === browseIndex ? ' selected' : ''}`}
               onClick={() => setBrowseIndex(i)}
               onDoubleClick={() => loadToDeck('A')}
@@ -236,3 +255,4 @@ export function TrackBrowser() {
     </div>
   )
 }
+

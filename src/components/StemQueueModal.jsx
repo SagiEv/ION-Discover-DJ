@@ -163,7 +163,7 @@ export function StemQueueModal({ onClose }) {
                         const pct = total > 0 ? (current / total) * 100 : 0
                         
                         return (
-                          <div style={{ marginTop: '4px', width: '100%', maxWidth: '240px' }}>
+                          <div style={{ marginTop: '4px', width: '100%' }}>
                             <div style={{ width: '100%', height: '6px', background: 'var(--bg-raised)', borderRadius: '3px', overflow: 'hidden', border: '1px solid var(--border)' }}>
                               <div className="progress-bar-glow" style={{ width: `${pct}%`, height: '100%', background: 'var(--accent-a)', transition: 'width 0.2s linear' }} />
                             </div>

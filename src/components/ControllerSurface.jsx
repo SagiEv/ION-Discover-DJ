@@ -9,60 +9,84 @@ function StemProgress({ deckId }) {
   const isA = deckId === 'A'
   const deckState = useAppStore(s => isA ? s.deckA : s.deckB)
 
-  const isFailed = deckState.stemsProgress && deckState.stemsProgress.toLowerCase().includes('failed:')
-
+  // Show nothing if no track, stems are ready, or no progress to display
   if (
     !deckState.track || 
     deckState.stemsReady || 
-    (!isFailed && deckState.stemsFailed) || 
-    !deckState.stemsProgress || 
-    (!isFailed && deckState.stemsProgress.toLowerCase().includes('done'))
+    (!deckState.stemsFailed && !deckState.stemsProgress)
   ) {
     return <div style={{ width: '30%', height: '4px' }} /> // placeholder
   }
 
+  // Handle failed state
+  if (deckState.stemsFailed) {
+    return (
+      <div style={{ width: '35%', display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '10px' }}>
+        <div style={{ 
+          width: '100%', 
+          height: '6px', 
+          background: '#1a1a1a', 
+          borderRadius: '3px', 
+          overflow: 'hidden', 
+          boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.8), 0 1px 0 rgba(255,255,255,0.05)',
+        }}>
+          <div style={{ 
+            width: '100%', 
+            height: '100%', 
+            background: '#ef4444', 
+            boxShadow: '0 0 8px rgba(239,68,68,0.5)'
+          }} />
+        </div>
+        <div style={{ 
+          fontSize: '10px', 
+          color: '#ef4444', 
+          textAlign: isA ? 'left' : 'right', 
+          fontFamily: 'monospace',
+        }}>
+          Stem separation failed
+        </div>
+      </div>
+    )
+  }
+
   // Parse progress
+  const progressText = deckState.stemsProgress || ''
+  const lowerText = progressText.toLowerCase()
+
+  // Don't show if already done
+  if (lowerText.includes('done') || lowerText === 'complete') {
+    return <div style={{ width: '30%', height: '4px' }} />
+  }
+
   let pct = 0
-  const match = deckState.stemsProgress.match(/(\d+)\/(\d+)/)
+  const match = progressText.match(/(\d+)\/(\d+)/)
   if (match) {
     const curr = parseInt(match[1], 10)
     const total = parseInt(match[2], 10)
     if (total > 0) pct = (curr / total) * 100
-  } else if (deckState.stemsProgress.includes('%')) {
-    const m = deckState.stemsProgress.match(/(\d+(\.\d+)?)%/)
+  } else if (progressText.includes('%')) {
+    const m = progressText.match(/(\d+(\.\d+)?)%/)
     if (m) pct = parseFloat(m[1])
-  } else if (deckState.stemsProgress.toLowerCase().includes('done') || deckState.stemsProgress.toLowerCase().includes('writing')) {
+  } else if (lowerText.includes('writing')) {
     pct = 100
   }
+
   // Format text for user
-  let progressText = deckState.stemsProgress
+  let displayText = progressText
   let isProcessing = true
-  const lowerText = progressText.toLowerCase()
 
   if (lowerText.includes('wrote:')) {
     const fileMatch = progressText.match(/([^\\/]+)\.wav/i)
-    if (fileMatch) {
-      progressText = `Saved ${fileMatch[1]} track...`
-    } else {
-      progressText = 'Saving track...'
-    }
+    displayText = fileMatch ? `Saved ${fileMatch[1]} track...` : 'Saving track...'
   } else if (progressText.match(/^\d+\/\d+$/)) {
-    progressText = 'Separating track...'
+    displayText = 'Separating track...'
   } else if (lowerText.includes('loading model') || lowerText.includes('reading')) {
-    progressText = 'Starting to separate the track...'
-  } else if (lowerText.includes('done')) {
-    progressText = 'Done!'
-    isProcessing = false
+    displayText = 'Starting to separate the track...'
   } else if (lowerText.includes('writing')) {
-    progressText = 'Finalizing files...'
-  } else if (lowerText.includes('failed:')) {
-    progressText = deckState.stemsProgress // Keep the exact error message we sent from main
-    isProcessing = false
+    displayText = 'Finalizing files...'
   }
 
-  const isError = lowerText.includes('failed:')
-  const color = isError ? '#ef4444' : (isA ? '#1db954' : '#3b82f6')
-  const barWidth = isError ? '100%' : `${pct}%`
+  const color = isA ? '#1db954' : '#3b82f6'
 
   return (
     <div style={{ width: '35%', display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '10px' }}>
@@ -87,7 +111,7 @@ function StemProgress({ deckId }) {
         boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.8), 0 1px 0 rgba(255,255,255,0.05)',
       }}>
         <div style={{ 
-          width: barWidth, 
+          width: `${pct}%`, 
           height: '100%', 
           background: color, 
           transition: 'width 0.3s ease',
@@ -105,7 +129,7 @@ function StemProgress({ deckId }) {
         overflow: 'hidden',
         textOverflow: 'ellipsis'
       }}>
-        {progressText}
+        {displayText}
       </div>
     </div>
   )

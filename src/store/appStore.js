@@ -239,6 +239,15 @@ export const useAppStore = create(persist((set, get) => ({
     newQueue.splice(toIndex, 0, moved)
     return { stemQueue: newQueue }
   }),
+
+  // ─── Toast Notifications ──────────────────────────────────────────────────
+  toasts: [],
+  addToast: (message, type = 'info', duration = 4000) => set(state => ({
+    toasts: [...state.toasts, { id: Date.now() + '_' + Math.random().toString(36).slice(2, 6), message, type, duration }]
+  })),
+  removeToast: (id) => set(state => ({
+    toasts: state.toasts.filter(t => t.id !== id)
+  })),
 }), {
   name: 'dj-knob-state',
   partialize: (state) => ({
