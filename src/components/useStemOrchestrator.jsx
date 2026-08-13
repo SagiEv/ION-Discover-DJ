@@ -25,7 +25,7 @@ export function useStemOrchestrator() {
       try {
         const engine = getDJController().engine
         await processLibraryTrackStems(nextItem.track, engine)
-        updateStemProgress(nextItem.trackId, { status: 'done', progress: 'Complete! ✅' })
+        updateStemProgress(nextItem.trackId, { status: 'done', progress: 'Complete' })
         
         // Auto-load into decks if they happen to be playing this track
         const state = useAppStore.getState()
@@ -33,23 +33,45 @@ export function useStemOrchestrator() {
         if (state.deckA.track?.stemTrackId === nextItem.trackId) dj.loadStemsFromDisk('A', nextItem.trackId)
         if (state.deckB.track?.stemTrackId === nextItem.trackId) dj.loadStemsFromDisk('B', nextItem.trackId)
         
-        // Handle native notification
+        // Notify user via in-app toast (safe, never throws)
+        try {
+          useAppStore.getState().addToast(
+            `Stems ready: ${nextItem.track.name}`,
+            'success',
+            5000
+          )
+        } catch (_) { /* never crash on notification */ }
+
+        // Leave it in queue briefly to show the checkmark animation, then remove
         const isPopupOpen = !!document.querySelector('.modal-overlay')
         if (isPopupOpen) {
-          // Leave it in queue for 1s to show the 'v' animation, then remove
           setTimeout(() => {
             useAppStore.getState().removeStemProcess(nextItem.trackId)
           }, 1000)
         } else {
-          // Popup closed, show native notification and remove immediately
-          new window.Notification('Stems Ready ✅', {
-            body: `${nextItem.track.name} stems have been successfully generated!`
-          })
           useAppStore.getState().removeStemProcess(nextItem.trackId)
         }
       } catch (error) {
         console.error('Stem Queue processing error:', error)
         updateStemProgress(nextItem.trackId, { status: 'error', progress: 'Failed', error: error.message })
+
+        // Also update deck UI so it stops showing stale progress
+        const state = useAppStore.getState()
+        if (state.deckA.track?.stemTrackId === nextItem.trackId) {
+          state.updateDeck('A', { stemsFailed: true, stemsProgress: '' })
+        }
+        if (state.deckB.track?.stemTrackId === nextItem.trackId) {
+          state.updateDeck('B', { stemsFailed: true, stemsProgress: '' })
+        }
+
+        // Show failure toast
+        try {
+          useAppStore.getState().addToast(
+            `Stem separation failed: ${nextItem.track.name}`,
+            'error',
+            6000
+          )
+        } catch (_) { /* never crash on notification */ }
       } finally {
         isProcessingRef.current = false
       }

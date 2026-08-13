@@ -346,23 +346,58 @@ ipcMain.handle('search-youtube', async (_, query) => {
 
     const tempFilePath = path.join(songsDir, `${title}.webm`)
 
-    // If file already exists, just return it
+    const metaFilePath = path.join(songsDir, `${title}.meta.json`)
+
+    // If file already exists, ensure meta file exists and return
     if (fs.existsSync(tempFilePath)) {
+      // Ensure meta file exists (migration for older downloads)
+      if (!fs.existsSync(metaFilePath)) {
+        try { fs.writeFileSync(metaFilePath, JSON.stringify({ videoId })) } catch (_) {}
+      }
       return { path: tempFilePath, name: title, videoId }
     }
 
-    // Download audio stream using yt-dlp as WebM
-    // WebM (Opus) works natively in Web Audio API without needing ffmpeg to fix DASH headers.
-    await youtubedl(video.url, {
-      format: 'bestaudio[ext=webm]',
-      output: tempFilePath,
-      noCheckCertificates: true,
-      noWarnings: true,
-      addHeader: [
-        'referer:youtube.com',
-        'user-agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
-      ]
-    })
+    // Download audio stream using yt-dlp as WebM with retry logic
+    // YouTube intermittently returns 403 errors; retrying usually works.
+    const MAX_RETRIES = 2
+    let lastError = null
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        await youtubedl(video.url, {
+          format: 'bestaudio[ext=webm]',
+          output: tempFilePath,
+          noCheckCertificates: true,
+          noWarnings: true,
+          addHeader: [
+            'referer:youtube.com',
+            'user-agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
+          ]
+        })
+        lastError = null
+        break // Success
+      } catch (dlErr) {
+        lastError = dlErr
+        const is403 = dlErr.stderr && dlErr.stderr.includes('403')
+        if (is403 && attempt < MAX_RETRIES) {
+          console.log(`[YouTube] 403 error on attempt ${attempt + 1}, retrying in ${(attempt + 1) * 1500}ms...`)
+          await new Promise(res => setTimeout(res, (attempt + 1) * 1500))
+        } else {
+          break // Non-retryable error or max retries reached
+        }
+      }
+    }
+
+    if (lastError) {
+      // Clean up partial download if any
+      try { if (fs.existsSync(tempFilePath)) fs.unlinkSync(tempFilePath) } catch (_) {}
+      const is403 = lastError.stderr && lastError.stderr.includes('403')
+      throw new Error(is403 
+        ? 'YouTube blocked the download (403 Forbidden). Please try again in a moment.'
+        : `Download failed: ${lastError.stderr || lastError.message}`)
+    }
+
+    // Save videoId metadata alongside the audio file
+    try { fs.writeFileSync(metaFilePath, JSON.stringify({ videoId })) } catch (_) {}
 
     return { path: tempFilePath, name: title, videoId }
   } catch (error) {
@@ -385,7 +420,20 @@ ipcMain.handle('load-default-library', async () => {
     const entries = fs.readdirSync(songsDir, { withFileTypes: true })
     for (const entry of entries) {
       if (!entry.isDirectory() && exts.has(path.extname(entry.name).toLowerCase())) {
-        results.push(path.join(songsDir, entry.name))
+        const filePath = path.join(songsDir, entry.name)
+        const baseName = entry.name.replace(/\.[^.]+$/, '')
+        const metaPath = path.join(songsDir, `${baseName}.meta.json`)
+        
+        // Try to recover videoId from sidecar .meta.json file
+        let videoId = null
+        try {
+          if (fs.existsSync(metaPath)) {
+            const meta = JSON.parse(fs.readFileSync(metaPath, 'utf8'))
+            videoId = meta.videoId || null
+          }
+        } catch (_) {}
+        
+        results.push({ path: filePath, videoId })
       }
     }
   } catch (e) {

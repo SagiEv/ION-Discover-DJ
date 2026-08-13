@@ -3,7 +3,6 @@ import { useAppStore } from '../store/appStore.js'
 import { getDJController } from '../engine/DJController.js'
 import { WaveformView } from './WaveformView.jsx'
 import { LyricsView } from './LyricsView.jsx'
-import { CountdownETA } from './CountdownETA.jsx'
 
 function fmt(secs) {
   if (!secs || isNaN(secs)) return '0:00'
@@ -167,9 +166,88 @@ export function DeckPanel({ deckId }) {
           {deckState.track && (
             <>
               <div className="deck__artist">{deckState.track.path?.split(/[\\/]/).at(-2) ?? ''}</div>
-              <div className="deck__bpm">
-                BPM <span>{deckState.bpm || '—'}</span>
-                {deckState.isReversed && <span style={{ color: '#ef4444', marginLeft: 8 }}>◀ REV</span>}
+              <div className="deck__bpm" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                {(() => {
+                  const baseBpm = deckState.bpm ? parseFloat(deckState.bpm) : 0;
+                  const effectiveBpm = baseBpm ? (baseBpm * (1 + deckState.pitch / 100)).toFixed(1) : '—';
+                  const isNudging = deckState.liveRate && deckState.liveRate !== 1.0;
+                  const liveBpm = isNudging && baseBpm ? (baseBpm * (1 + deckState.pitch / 100) * deckState.liveRate).toFixed(1) : null;
+                  const color = deckId === 'A' ? 'var(--accent-a)' : 'var(--accent-b)';
+                  
+                  return (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <div>BPM <span>{effectiveBpm}</span></div>
+                      
+                      {/* Temporary Live Nudge Indicator */}
+                      <div style={{
+                        opacity: isNudging ? 1 : 0,
+                        transform: isNudging ? 'translateX(0)' : 'translateX(-10px)',
+                        transition: 'all 0.15s cubic-bezier(0.4, 0, 0.2, 1)',
+                        background: color,
+                        color: '#000',
+                        padding: '1px 6px',
+                        borderRadius: '4px',
+                        fontSize: '11px',
+                        fontWeight: '800',
+                        pointerEvents: 'none'
+                      }}>
+                        {deckState.liveRate > 1 ? '»' : '«'} {liveBpm}
+                      </div>
+                    </div>
+                  )
+                })()}
+                
+                <div style={{ 
+                  display: 'flex', alignItems: 'center', gap: '6px', 
+                  background: 'rgba(255,255,255,0.05)', padding: '2px 8px', 
+                  borderRadius: '12px', fontSize: '11px', color: 'var(--text-muted)' 
+                }}>
+                  <span style={{ 
+                    color: deckState.pitchDownPressed ? 'var(--accent-a)' : 'var(--text-muted)',
+                    opacity: deckState.pitchDownPressed ? 1 : 0.4,
+                    transition: 'all 0.1s',
+                    fontSize: '9px'
+                  }}>▼</span>
+                  <span style={{ fontWeight: 600, color: deckState.pitch !== 0 ? 'var(--accent-a)' : 'inherit', minWidth: '32px', textAlign: 'center' }}>
+                    {deckState.pitch > 0 ? '+' : ''}{deckState.pitch.toFixed(1)}%
+                  </span>
+                  <span style={{ 
+                    color: deckState.pitchUpPressed ? 'var(--accent-a)' : 'var(--text-muted)',
+                    opacity: deckState.pitchUpPressed ? 1 : 0.4,
+                    transition: 'all 0.1s',
+                    fontSize: '9px'
+                  }}>▲</span>
+                  <span style={{ fontSize: '9px', opacity: 0.7, marginLeft: '2px' }}>PITCH</span>
+                </div>
+                
+                {/* Pitch Lock (Cruise Control) */}
+                <div style={{ display: 'flex', alignItems: 'center' }}>
+                  <svg 
+                    width="14" height="14" viewBox="0 0 24 24" 
+                    fill={deckState.pitchLockRate ? 'var(--accent-a)' : 'none'}
+                    stroke={deckState.pitchLockRate ? 'var(--bg-base)' : 'var(--text-muted)'} 
+                    strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                    style={{ 
+                      cursor: 'pointer',
+                      opacity: deckState.pitchLockRate ? 1 : 0.6,
+                      transition: 'all 0.2s',
+                      filter: deckState.pitchLockRate ? 'drop-shadow(0 0 4px var(--accent-a))' : 'none'
+                    }}
+                    onClick={() => {
+                      const dj = getDJController();
+                      if (deckState.pitchLockRate) {
+                        dj.unlockScratchRate(deckId);
+                      } else {
+                        dj.lockCurrentScratchRate(deckId);
+                      }
+                    }}
+                  >
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                  </svg>
+                </div>
+                
+                {deckState.isReversed && <span style={{ color: '#ef4444' }}>◀ REV</span>}
               </div>
             </>
           )}
@@ -310,29 +388,6 @@ export function DeckPanel({ deckId }) {
                 </div>
               </div>
             </>
-          ) : deckState.stemsFailed ? (
-            <div style={{ fontSize: '12px', color: 'var(--accent-red)' }}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{marginRight: '4px', verticalAlign: 'middle'}}><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-              Stems failed: {deckState.stemsProgress}
-            </div>
-          ) : deckState.stemsProgress ? (
-            <div style={{ fontSize: '12px', color: 'var(--accent-a)', width: '100%', display: 'flex', gap: '4px', alignItems: 'center' }}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="spin-anim" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"/><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"/><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"/></svg>
-              {(() => {
-                const match = deckState.stemsProgress.match(/(\d+)\/(\d+)/)
-                if (match) {
-                  const current = parseInt(match[1], 10)
-                  const total = parseInt(match[2], 10)
-                  return (
-                    <>
-                      <span>Processing Stems: {deckState.stemsProgress}</span>
-                      <CountdownETA totalSteps={total} currentStep={current} trackId={deckId} progressStr={deckState.stemsProgress} />
-                    </>
-                  )
-                }
-                return deckState.stemsProgress
-              })()}
-            </div>
           ) : null}
         </div>
       )}

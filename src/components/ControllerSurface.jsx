@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react'
+import React, { useCallback, useRef } from 'react'
 import { useAppStore } from '../store/appStore.js'
 import { getDJController } from '../engine/DJController.js'
 import { Knob } from './Knob.jsx'
@@ -9,60 +9,84 @@ function StemProgress({ deckId }) {
   const isA = deckId === 'A'
   const deckState = useAppStore(s => isA ? s.deckA : s.deckB)
 
-  const isFailed = deckState.stemsProgress && deckState.stemsProgress.toLowerCase().includes('failed:')
-
+  // Show nothing if no track, stems are ready, or no progress to display
   if (
     !deckState.track || 
     deckState.stemsReady || 
-    (!isFailed && deckState.stemsFailed) || 
-    !deckState.stemsProgress || 
-    (!isFailed && deckState.stemsProgress.toLowerCase().includes('done'))
+    (!deckState.stemsFailed && !deckState.stemsProgress)
   ) {
     return <div style={{ width: '30%', height: '4px' }} /> // placeholder
   }
 
+  // Handle failed state
+  if (deckState.stemsFailed) {
+    return (
+      <div style={{ width: '35%', display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '10px' }}>
+        <div style={{ 
+          width: '100%', 
+          height: '6px', 
+          background: '#1a1a1a', 
+          borderRadius: '3px', 
+          overflow: 'hidden', 
+          boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.8), 0 1px 0 rgba(255,255,255,0.05)',
+        }}>
+          <div style={{ 
+            width: '100%', 
+            height: '100%', 
+            background: '#ef4444', 
+            boxShadow: '0 0 8px rgba(239,68,68,0.5)'
+          }} />
+        </div>
+        <div style={{ 
+          fontSize: '10px', 
+          color: '#ef4444', 
+          textAlign: isA ? 'left' : 'right', 
+          fontFamily: 'monospace',
+        }}>
+          Stem separation failed
+        </div>
+      </div>
+    )
+  }
+
   // Parse progress
+  const progressText = deckState.stemsProgress || ''
+  const lowerText = progressText.toLowerCase()
+
+  // Don't show if already done
+  if (lowerText.includes('done') || lowerText === 'complete') {
+    return <div style={{ width: '30%', height: '4px' }} />
+  }
+
   let pct = 0
-  const match = deckState.stemsProgress.match(/(\d+)\/(\d+)/)
+  const match = progressText.match(/(\d+)\/(\d+)/)
   if (match) {
     const curr = parseInt(match[1], 10)
     const total = parseInt(match[2], 10)
     if (total > 0) pct = (curr / total) * 100
-  } else if (deckState.stemsProgress.includes('%')) {
-    const m = deckState.stemsProgress.match(/(\d+(\.\d+)?)%/)
+  } else if (progressText.includes('%')) {
+    const m = progressText.match(/(\d+(\.\d+)?)%/)
     if (m) pct = parseFloat(m[1])
-  } else if (deckState.stemsProgress.toLowerCase().includes('done') || deckState.stemsProgress.toLowerCase().includes('writing')) {
+  } else if (lowerText.includes('writing')) {
     pct = 100
   }
+
   // Format text for user
-  let progressText = deckState.stemsProgress
+  let displayText = progressText
   let isProcessing = true
-  const lowerText = progressText.toLowerCase()
 
   if (lowerText.includes('wrote:')) {
     const fileMatch = progressText.match(/([^\\/]+)\.wav/i)
-    if (fileMatch) {
-      progressText = `Saved ${fileMatch[1]} track...`
-    } else {
-      progressText = 'Saving track...'
-    }
+    displayText = fileMatch ? `Saved ${fileMatch[1]} track...` : 'Saving track...'
   } else if (progressText.match(/^\d+\/\d+$/)) {
-    progressText = 'Separating track...'
+    displayText = 'Separating track...'
   } else if (lowerText.includes('loading model') || lowerText.includes('reading')) {
-    progressText = 'Starting to separate the track...'
-  } else if (lowerText.includes('done')) {
-    progressText = 'Done!'
-    isProcessing = false
+    displayText = 'Starting to separate the track...'
   } else if (lowerText.includes('writing')) {
-    progressText = 'Finalizing files...'
-  } else if (lowerText.includes('failed:')) {
-    progressText = deckState.stemsProgress // Keep the exact error message we sent from main
-    isProcessing = false
+    displayText = 'Finalizing files...'
   }
 
-  const isError = lowerText.includes('failed:')
-  const color = isError ? '#ef4444' : (isA ? '#1db954' : '#3b82f6')
-  const barWidth = isError ? '100%' : `${pct}%`
+  const color = isA ? '#1db954' : '#3b82f6'
 
   return (
     <div style={{ width: '35%', display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '10px' }}>
@@ -87,7 +111,7 @@ function StemProgress({ deckId }) {
         boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.8), 0 1px 0 rgba(255,255,255,0.05)',
       }}>
         <div style={{ 
-          width: barWidth, 
+          width: `${pct}%`, 
           height: '100%', 
           background: color, 
           transition: 'width 0.3s ease',
@@ -105,7 +129,7 @@ function StemProgress({ deckId }) {
         overflow: 'hidden',
         textOverflow: 'ellipsis'
       }}>
-        {progressText}
+        {displayText}
       </div>
     </div>
   )
@@ -115,6 +139,7 @@ function DeckButtons({ deckId }) {
   const dj = getDJController()
   const isA = deckId === 'A'
   const deckState = useAppStore(s => isA ? s.deckA : s.deckB)
+  const pressed = useAppStore(s => s.pressedButtons)
 
   const onPlay = useCallback(() => dj.playStutter(deckId), [deckId])
   const onPause = useCallback(() => dj.pause(deckId), [deckId])
@@ -126,21 +151,21 @@ function DeckButtons({ deckId }) {
   return (
     <div className="hw-btn-column">
       <button
-        className={`hw-btn hw-btn--sync ${deckState.isPlaying ? (isA ? 'active--a' : 'active--b') : ''}`}
+        className={`hw-btn hw-btn--sync ${deckState.isSyncEnabled ? (isA ? 'active--a' : 'active--b') : ''} ${pressed[`sync_${deckId}`] ? 'hw-btn--pressed' : ''}`}
         onClick={onSync}
         title="SYNC"
       >
         SYNC
       </button>
       <button
-        className={`hw-btn hw-btn--rev ${deckState.isReversed ? 'active--rev' : ''}`}
+        className={`hw-btn hw-btn--rev ${deckState.isReversed ? 'active--rev' : ''} ${pressed[`rev_${deckId}`] ? 'hw-btn--pressed' : ''}`}
         onClick={onRev}
         title="REV"
       >
         REV
       </button>
       <button
-        className="hw-btn hw-btn--cue"
+        className={`hw-btn hw-btn--cue ${pressed[`cue_${deckId}`] ? 'hw-btn--pressed' : ''}`}
         onMouseDown={onCueDown}
         onMouseUp={onCueUp}
         title="CUE"
@@ -148,7 +173,7 @@ function DeckButtons({ deckId }) {
         CUE
       </button>
       <button
-        className={`hw-btn hw-btn--play ${deckState.isPlaying ? (isA ? 'active--a' : 'active--b') : ''}`}
+        className={`hw-btn hw-btn--play ${deckState.isPlaying ? (isA ? 'active--a' : 'active--b') : ''} ${pressed[`play_pause_${deckId}`] || pressed[`play_${deckId}`] ? 'hw-btn--pressed' : ''}`}
         onClick={deckState.isPlaying ? onPause : onPlay}
         title="PLAY / PAUSE"
       >
@@ -162,6 +187,8 @@ function DeckKnobs({ deckId }) {
   const dj = getDJController()
   const isA = deckId === 'A'
   const deckState = useAppStore(s => isA ? s.deckA : s.deckB)
+  const pressed = useAppStore(s => s.pressedButtons)
+  const eqMode = useAppStore(s => s.eqMode)
 
   const onPitchDown = useCallback(() => dj.pitchBendDown(deckId), [deckId])
   const onPitchUp = useCallback(() => dj.pitchBendUp(deckId), [deckId])
@@ -171,7 +198,7 @@ function DeckKnobs({ deckId }) {
     <div className="knob-column">
       <div className="pitch-btns">
         <button
-          className="hw-btn hw-btn--pitch"
+          className={`hw-btn hw-btn--pitch ${pressed[`pitch_minus_${deckId}`] ? 'hw-btn--pressed' : ''}`}
           onMouseDown={onPitchDown}
           onMouseUp={onPitchRelease}
           onMouseLeave={onPitchRelease}
@@ -180,7 +207,7 @@ function DeckKnobs({ deckId }) {
           −%
         </button>
         <button
-          className="hw-btn hw-btn--pitch"
+          className={`hw-btn hw-btn--pitch ${pressed[`pitch_plus_${deckId}`] ? 'hw-btn--pressed' : ''}`}
           onMouseDown={onPitchUp}
           onMouseUp={onPitchRelease}
           onMouseLeave={onPitchRelease}
@@ -190,23 +217,98 @@ function DeckKnobs({ deckId }) {
         </button>
       </div>
       <Knob
-        label="TREBLE"
+        label={eqMode === '3-band' ? 'HIGH' : 'TREBLE'}
         value={deckState.treble ?? 0.5}
         onChange={v => dj.setTreble(deckId, v)}
         size={40}
       />
       <Knob
-        label="BASS"
-        value={deckState.bass ?? 0.5}
-        onChange={v => dj.setBass(deckId, v)}
+        label={eqMode === '3-band' ? 'MID' : 'BASS'}
+        value={eqMode === '3-band' ? (deckState.mid ?? 0.5) : (deckState.bass ?? 0.5)}
+        onChange={v => {
+          if (eqMode === '3-band') {
+            dj._deck(deckId).setMid(v);
+            useAppStore.getState().updateDeck(deckId, { mid: v })
+          } else {
+            dj.setBass(deckId, v)
+          }
+        }}
         size={40}
       />
       <Knob
-        label="VOLUME"
-        value={deckState.volume ?? 0.8}
-        onChange={v => dj.setVolume(deckId, v)}
+        label={eqMode === '3-band' ? 'LOW' : 'VOLUME'}
+        value={eqMode === '3-band' ? (deckState.bass ?? 0.5) : (deckState.volume ?? 0.8)}
+        onChange={v => {
+          if (eqMode === '3-band') {
+            dj.setBass(deckId, v)
+          } else {
+            dj.setVolume(deckId, v)
+          }
+        }}
         size={40}
       />
+    </div>
+  )
+}
+
+function BrowseKnob() {
+  const dj = getDJController()
+  const browseAngle = useAppStore(s => s.browseAngle)
+  const dragStart = useRef(null)
+  const accumulated = useRef(0)
+  const size = 50
+
+  const handleMouseDown = useCallback((e) => {
+    e.preventDefault()
+    dragStart.current = e.clientX
+    accumulated.current = 0
+
+    const handleMouseMove = (e) => {
+      if (dragStart.current === null) return
+      const dx = e.clientX - dragStart.current
+      accumulated.current += dx
+      dragStart.current = e.clientX
+      // Every 20px of drag = one browse step
+      const steps = Math.trunc(accumulated.current / 20)
+      if (steps !== 0) {
+        for (let i = 0; i < Math.abs(steps); i++) {
+          dj.browseTurn(steps > 0 ? 1 : -1)
+        }
+        accumulated.current -= steps * 20
+      }
+    }
+
+    const handleMouseUp = () => {
+      dragStart.current = null
+      accumulated.current = 0
+      document.removeEventListener('mousemove', handleMouseMove)
+      document.removeEventListener('mouseup', handleMouseUp)
+    }
+
+    document.addEventListener('mousemove', handleMouseMove)
+    document.addEventListener('mouseup', handleMouseUp)
+  }, [])
+
+  const handleWheel = useCallback((e) => {
+    e.preventDefault()
+    dj.browseTurn(e.deltaY > 0 ? 1 : -1)
+  }, [])
+
+  return (
+    <div className="knob-wrap-hw">
+      <label className="knob-label-hw">BROWSE</label>
+      <div
+        className="knob-hw"
+        style={{ width: size, height: size }}
+        onMouseDown={handleMouseDown}
+        onWheel={handleWheel}
+      >
+        <div
+          className="knob-hw__pointer"
+          style={{ transform: `rotate(${browseAngle}deg)` }}
+        />
+        <div className="knob-hw__dot" />
+      </div>
     </div>
   )
 }
@@ -215,6 +317,8 @@ function CenterSection() {
   const dj = getDJController()
   const masterVolume = useAppStore(s => s.masterVolume)
   const scratchMode = useAppStore(s => s.scratchModeEnabled)
+  const pressed = useAppStore(s => s.pressedButtons)
+  const eqMode = useAppStore(s => s.eqMode)
 
   return (
     <div className="controller-center">
@@ -224,32 +328,37 @@ function CenterSection() {
         onChange={v => dj.setMasterVolume(v)}
         size={46}
       />
-      <Knob
-        label="BROWSE"
-        value={0.5}
-        onChange={v => {
-          const delta = v > 0.5 ? 1 : -1
-          dj.browseTurn(delta)
+      <BrowseKnob />
+      
+      {/* EQ Mode Toggle */}
+      <button 
+        className="hw-btn" 
+        style={{ width: '40px', height: '24px', fontSize: '9px', padding: 0, marginTop: '10px' }}
+        onClick={() => {
+          const current = useAppStore.getState().eqMode;
+          useAppStore.setState({ eqMode: current === '2-band' ? '3-band' : '2-band' });
         }}
-        size={50}
-      />
+        title="Toggle 2-Band (Volume) / 3-Band (High/Mid/Low) EQ"
+      >
+        {eqMode === '3-band' ? '3-EQ' : '2-EQ'}
+      </button>
       <div className="load-buttons">
         <button
-          className="hw-btn hw-btn--load"
+          className={`hw-btn hw-btn--load ${pressed['load_A'] ? 'hw-btn--pressed' : ''}`}
           onClick={() => dj._loadSelectedToDeck('A')}
           title="Load to Deck A"
         >
           A
         </button>
         <button
-          className={`hw-btn hw-btn--scratch ${scratchMode ? 'active--scratch' : ''}`}
+          className={`hw-btn hw-btn--scratch ${scratchMode ? 'active--scratch' : ''} ${pressed['scratch_toggle'] ? 'hw-btn--pressed' : ''}`}
           onClick={() => dj.toggleScratchMode()}
           title="Scratch / Search"
         >
           {scratchMode ? '●' : '○'}
         </button>
         <button
-          className="hw-btn hw-btn--load"
+          className={`hw-btn hw-btn--load ${pressed['load_B'] ? 'hw-btn--pressed' : ''}`}
           onClick={() => dj._loadSelectedToDeck('B')}
           title="Load to Deck B"
         >
