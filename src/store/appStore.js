@@ -148,6 +148,7 @@ export const useAppStore = create((set, get) => ({
 
   // ─── Browse ─────────────────────────────────────────────────────────────────
   browseIndex: 0,
+  browseAngle: 0,
   setBrowseIndex: (i) => set({ browseIndex: i }),
 
   // ─── Stem Queue ─────────────────────────────────────────────────────────────

@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react'
+import React, { useCallback, useRef } from 'react'
 import { useAppStore } from '../store/appStore.js'
 import { getDJController } from '../engine/DJController.js'
 import { Knob } from './Knob.jsx'
@@ -227,6 +227,68 @@ function DeckKnobs({ deckId }) {
   )
 }
 
+function BrowseKnob() {
+  const dj = getDJController()
+  const browseAngle = useAppStore(s => s.browseAngle)
+  const dragStart = useRef(null)
+  const accumulated = useRef(0)
+  const size = 50
+
+  const handleMouseDown = useCallback((e) => {
+    e.preventDefault()
+    dragStart.current = e.clientX
+    accumulated.current = 0
+
+    const handleMouseMove = (e) => {
+      if (dragStart.current === null) return
+      const dx = e.clientX - dragStart.current
+      accumulated.current += dx
+      dragStart.current = e.clientX
+      // Every 20px of drag = one browse step
+      const steps = Math.trunc(accumulated.current / 20)
+      if (steps !== 0) {
+        for (let i = 0; i < Math.abs(steps); i++) {
+          dj.browseTurn(steps > 0 ? 1 : -1)
+        }
+        accumulated.current -= steps * 20
+      }
+    }
+
+    const handleMouseUp = () => {
+      dragStart.current = null
+      accumulated.current = 0
+      document.removeEventListener('mousemove', handleMouseMove)
+      document.removeEventListener('mouseup', handleMouseUp)
+    }
+
+    document.addEventListener('mousemove', handleMouseMove)
+    document.addEventListener('mouseup', handleMouseUp)
+  }, [])
+
+  const handleWheel = useCallback((e) => {
+    e.preventDefault()
+    dj.browseTurn(e.deltaY > 0 ? 1 : -1)
+  }, [])
+
+  return (
+    <div className="knob-wrap-hw">
+      <label className="knob-label-hw">BROWSE</label>
+      <div
+        className="knob-hw"
+        style={{ width: size, height: size }}
+        onMouseDown={handleMouseDown}
+        onWheel={handleWheel}
+      >
+        <div
+          className="knob-hw__pointer"
+          style={{ transform: `rotate(${browseAngle}deg)` }}
+        />
+        <div className="knob-hw__dot" />
+      </div>
+    </div>
+  )
+}
+
 function CenterSection() {
   const dj = getDJController()
   const masterVolume = useAppStore(s => s.masterVolume)
@@ -242,15 +304,7 @@ function CenterSection() {
         onChange={v => dj.setMasterVolume(v)}
         size={46}
       />
-      <Knob
-        label="BROWSE"
-        value={0.5}
-        onChange={v => {
-          const delta = v > 0.5 ? 1 : -1
-          dj.browseTurn(delta)
-        }}
-        size={50}
-      />
+      <BrowseKnob />
       
       {/* EQ Mode Toggle */}
       <button 

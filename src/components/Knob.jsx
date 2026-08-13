@@ -15,13 +15,13 @@ export function Knob({ value = 0.5, onChange, size = 44, label, min = 0, max = 1
 
   const handleMouseDown = useCallback((e) => {
     e.preventDefault()
-    dragStart.current = { y: e.clientY, value }
+    dragStart.current = { x: e.clientX, value }
 
     const handleMouseMove = (e) => {
       if (!dragStart.current) return
-      const dy = dragStart.current.y - e.clientY // up = positive
+      const dx = e.clientX - dragStart.current.x // right = positive
       const sensitivity = 0.005
-      const newVal = Math.max(min, Math.min(max, dragStart.current.value + dy * sensitivity))
+      const newVal = Math.max(min, Math.min(max, dragStart.current.value + dx * sensitivity))
       onChange(newVal)
     }
 

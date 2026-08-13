@@ -639,6 +639,8 @@ class DJController {
     const store = useAppStore.getState()
     const newIndex = Math.max(0, Math.min(store.library.length - 1, store.browseIndex + delta))
     store.setBrowseIndex(newIndex)
+    // Accumulate visual rotation for the browse knob (30° per step)
+    useAppStore.setState({ browseAngle: store.browseAngle + delta * 30 })
   }
 
   // ─── MIDI action dispatcher ────────────────────────────────────────────────
@@ -647,6 +649,7 @@ class DJController {
     const isOff = msg.type === 'noteoff'
     const val = msg.value !== undefined ? msg.value / 127 : 0
     const rawVal = msg.value ?? 0
+    const store = useAppStore.getState()
     
     // Store physical button pressed state for UI feedback
     if (isOn) useAppStore.getState().setButtonPressed(action, true)
@@ -766,7 +769,7 @@ class DJController {
       case 'master_volume': this.setMasterVolume(val); break
       case 'browse_turn':
         // Relative CC: >64 = clockwise, <64 = counter-clockwise
-        this.browseTurn(rawVal > 64 ? 1 : -1)
+        this.browseTurn(rawVal > 64 ? -1 : 1)
         break
       case 'browse_press':
         if (isOn) { /* expand folder / load logic */ }
