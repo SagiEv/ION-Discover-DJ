@@ -6,6 +6,7 @@ import { ControllerSurface } from './components/ControllerSurface.jsx'
 import { MidiLearnModal, useMidi } from './components/MidiLayer.jsx'
 import { useStemOrchestrator } from './components/useStemOrchestrator.jsx'
 import { StemQueueModal } from './components/StemQueueModal.jsx'
+import { BrowseModal } from './components/BrowseModal.jsx'
 import { ToastContainer } from './components/Toast.jsx'
 import './index.css'
 
@@ -162,6 +163,7 @@ export default function App() {
 
       {showMidi && <MidiLearnModal onClose={() => setShowMidi(false)} />}
       {showStemQueue && <StemQueueModal onClose={() => setShowStemQueue(false)} />}
+      <BrowseModal />
       <ToastContainer />
     </div>
   )

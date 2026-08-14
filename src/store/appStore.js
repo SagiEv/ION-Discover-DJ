@@ -15,6 +15,10 @@ export const getTrackId = (trackInfo) => {
   return trackInfo.videoId || safePath;
 }
 
+// Utility to generate unique IDs for filesystem nodes
+const genId = () => Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 7)
+
+
 // ─── Deck slice ────────────────────────────────────────────────────────────────
 const makeDeckState = () => ({
   track: null,          // { name, path, duration, bpm, waveform }
@@ -150,7 +154,11 @@ export const useAppStore = create(persist((set, get) => ({
   // ─── Browse ─────────────────────────────────────────────────────────────────
   browseIndex: 0,
   browseAngle: 0,
+  browseListCount: 0,
+  activeLoadCallback: null,
   setBrowseIndex: (i) => set({ browseIndex: i }),
+  setBrowseListCount: (c) => set({ browseListCount: c }),
+  setActiveLoadCallback: (cb) => set({ activeLoadCallback: cb }),
 
   // ─── Stem Queue ─────────────────────────────────────────────────────────────
   stemQueue: [], // Array of { trackId, track, progress, status, error }
@@ -248,6 +256,318 @@ export const useAppStore = create(persist((set, get) => ({
   removeToast: (id) => set(state => ({
     toasts: state.toasts.filter(t => t.id !== id)
   })),
+
+  // ─── Browse Popup ──────────────────────────────────────────────────────────
+  browseOpen: false,
+  toggleBrowse: () => set(s => ({ browseOpen: !s.browseOpen })),
+  setBrowseOpen: (v) => set({ browseOpen: v }),
+
+  // ─── Virtual Filesystem ────────────────────────────────────────────────────
+  // Each node: { id, name, type: 'folder'|'track'|'set', children: [ids], parentId, 
+  //              trackRef (path for tracks), tags (for tracks), 
+  //              tracks (for sets: [{path,name,deckId,queueOrder}]),
+  //              deckConfig (for sets: {deckA:{track,queue},deckB:{track,queue}}) }
+  fsNodes: {
+    root: { id: 'root', name: 'Music', type: 'folder', children: ['sets_root'], parentId: null },
+    sets_root: { id: 'sets_root', name: 'Sets', type: 'folder', children: [], parentId: 'root' },
+  },
+  currentFolderId: 'root',
+  browseSearchQuery: '',
+  browseTagFilter: [],
+
+  // ─── Tags ──────────────────────────────────────────────────────────────────
+  allTags: ['POP', 'EDM', 'HOUSE', 'TECHNO', 'HIP HOP', 'R&B', 'FESTIVAL', 'HIGH ENERGY', 'CHILL', 'CLASSIC', 'DRUM & BASS', 'TRANCE'],
+  trackTags: {}, // { [trackPath]: ['EDM', 'FESTIVAL'] }
+
+  // ─── Library View ──────────────────────────────────────────────────────────
+  libraryView: 'all', // 'all' | 'folder' | 'set'
+  libraryFilterId: null, // id of folder/set being viewed
+  libraryTagFilter: [],
+  setLibraryView: (view, filterId) => set({ libraryView: view, libraryFilterId: filterId || null }),
+  setLibraryTagFilter: (tags) => set({ libraryTagFilter: tags }),
+  toggleLibraryTag: (tag) => set(s => ({
+    libraryTagFilter: s.libraryTagFilter.includes(tag)
+      ? s.libraryTagFilter.filter(t => t !== tag)
+      : [...s.libraryTagFilter, tag]
+  })),
+
+  // ─── Filesystem Actions ────────────────────────────────────────────────────
+
+  setCurrentFolder: (id) => set({ currentFolderId: id }),
+  setBrowseSearch: (q) => set({ browseSearchQuery: q }),
+  toggleBrowseTag: (tag) => set(s => ({
+    browseTagFilter: s.browseTagFilter.includes(tag)
+      ? s.browseTagFilter.filter(t => t !== tag)
+      : [...s.browseTagFilter, tag]
+  })),
+  clearBrowseTagFilter: () => set({ browseTagFilter: [] }),
+
+  createFolder: (parentId, name) => set(s => {
+    const id = genId()
+
+    const parent = s.fsNodes[parentId]
+    if (!parent) return s
+    return {
+      fsNodes: {
+        ...s.fsNodes,
+        [id]: { id, name, type: 'folder', children: [], parentId },
+        [parentId]: { ...parent, children: [...parent.children, id] },
+      }
+    }
+  }),
+
+  renameItem: (id, newName) => set(s => {
+    const node = s.fsNodes[id]
+    if (!node) return s
+    return { fsNodes: { ...s.fsNodes, [id]: { ...node, name: newName } } }
+  }),
+
+  deleteItem: (id) => set(s => {
+    if (id === 'root' || id === 'sets_root') return s
+    const node = s.fsNodes[id]
+    if (!node) return s
+    // Remove from parent
+    const newNodes = { ...s.fsNodes }
+    if (node.parentId && newNodes[node.parentId]) {
+      newNodes[node.parentId] = {
+        ...newNodes[node.parentId],
+        children: newNodes[node.parentId].children.filter(c => c !== id),
+      }
+    }
+    // Recursively delete children
+    const toDelete = [id]
+    const collectChildren = (nid) => {
+      const n = newNodes[nid]
+      if (n && n.children) n.children.forEach(c => { toDelete.push(c); collectChildren(c) })
+    }
+    collectChildren(id)
+    toDelete.forEach(did => delete newNodes[did])
+    return { fsNodes: newNodes }
+  }),
+
+  addTrackToFolder: (folderId, track) => set(s => {
+    if (folderId === 'sets_root' || folderId === 'root') return s
+    const folder = s.fsNodes[folderId]
+    if (!folder || (folder.type !== 'folder' && folder.type !== 'set')) return s
+    const id = genId()
+
+    // Check if track already exists in this folder
+    const exists = folder.children.some(cid => {
+      const child = s.fsNodes[cid]
+      return child && child.type === 'track' && child.trackRef === track.path
+    })
+    if (exists) return s
+    return {
+      fsNodes: {
+        ...s.fsNodes,
+        [id]: { id, name: track.name, type: 'track', children: [], parentId: folderId, trackRef: track.path, trackData: track },
+        [folderId]: { ...folder, children: [...folder.children, id] },
+      }
+    }
+  }),
+
+  removeTrackFromFolder: (folderId, trackNodeId) => set(s => {
+    const folder = s.fsNodes[folderId]
+    if (!folder || (folder.type !== 'folder' && folder.type !== 'set')) return s
+    const newNodes = { ...s.fsNodes }
+    newNodes[folderId] = { ...folder, children: folder.children.filter(c => c !== trackNodeId) }
+    delete newNodes[trackNodeId]
+    return { fsNodes: newNodes }
+  }),
+
+  moveItem: (itemId, newParentId) => set(s => {
+    const node = s.fsNodes[itemId]
+    if (!node || !s.fsNodes[newParentId]) return s
+    const oldParent = s.fsNodes[node.parentId]
+    const newParent = s.fsNodes[newParentId]
+    return {
+      fsNodes: {
+        ...s.fsNodes,
+        [itemId]: { ...node, parentId: newParentId },
+        [node.parentId]: { ...oldParent, children: oldParent.children.filter(c => c !== itemId) },
+        [newParentId]: { ...newParent, children: [...newParent.children, itemId] },
+      }
+    }
+  }),
+
+  reorderFolderChildren: (folderId, fromIndex, toIndex) => set(s => {
+    const folder = s.fsNodes[folderId]
+    if (!folder || !folder.children) return s
+    const newChildren = [...folder.children]
+    const [moved] = newChildren.splice(fromIndex, 1)
+    newChildren.splice(toIndex, 0, moved)
+    return {
+      fsNodes: {
+        ...s.fsNodes,
+        [folderId]: { ...folder, children: newChildren },
+      }
+    }
+  }),
+
+  // ─── Tag Actions ───────────────────────────────────────────────────────────
+  createTag: (tag) => set(s => ({
+    allTags: s.allTags.includes(tag.toUpperCase()) ? s.allTags : [...s.allTags, tag.toUpperCase()]
+  })),
+
+  addTagToTrack: (trackPath, tag) => set(s => {
+    const current = s.trackTags[trackPath] || []
+    if (current.includes(tag)) return s
+    return { trackTags: { ...s.trackTags, [trackPath]: [...current, tag] } }
+  }),
+
+  removeTagFromTrack: (trackPath, tag) => set(s => {
+    const current = s.trackTags[trackPath] || []
+    return { trackTags: { ...s.trackTags, [trackPath]: current.filter(t => t !== tag) } }
+  }),
+
+  // ─── Set Actions ───────────────────────────────────────────────────────────
+  saveSet: (name) => set(s => {
+    const id = genId()
+
+    const deckAState = s.deckA
+    const deckBState = s.deckB
+    
+    // Collect tracks
+    const tracks = [
+      deckAState.track,
+      ...deckAState.queue,
+      deckBState.track,
+      ...deckBState.queue
+    ].filter(Boolean)
+
+    // Deduplicate tracks by path
+    const uniqueTracks = []
+    const seen = new Set()
+    for (const t of tracks) {
+      if (!seen.has(t.path)) {
+        seen.add(t.path)
+        uniqueTracks.push(t)
+      }
+    }
+
+    const newNodes = { ...s.fsNodes }
+    const childIds = []
+    uniqueTracks.forEach(t => {
+      const childId = genId()
+      childIds.push(childId)
+      newNodes[childId] = {
+        id: childId,
+        name: t.name,
+        type: 'track',
+        children: [],
+        parentId: id,
+        trackRef: t.path,
+        trackData: t
+      }
+    })
+
+    const setNode = {
+      id,
+      name,
+      type: 'set',
+      children: childIds,
+      parentId: 'sets_root',
+      deckConfig: {
+        deckA: {
+          track: deckAState.track ? { ...deckAState.track } : null,
+          queue: [...deckAState.queue],
+        },
+        deckB: {
+          track: deckBState.track ? { ...deckBState.track } : null,
+          queue: [...deckBState.queue],
+        },
+      },
+    }
+    const setsRoot = s.fsNodes['sets_root']
+    newNodes[id] = setNode
+    newNodes['sets_root'] = { ...setsRoot, children: [...setsRoot.children, id] }
+
+    return { fsNodes: newNodes }
+  }),
+
+  updateSetSnapshot: (setId) => set(s => {
+    const setNode = s.fsNodes[setId]
+    if (!setNode || setNode.type !== 'set') return s
+    const deckAState = s.deckA
+    const deckBState = s.deckB
+    return {
+      fsNodes: {
+        ...s.fsNodes,
+        [setId]: {
+          ...setNode,
+          deckConfig: {
+            deckA: { track: deckAState.track ? { ...deckAState.track } : null, queue: [...deckAState.queue] },
+            deckB: { track: deckBState.track ? { ...deckBState.track } : null, queue: [...deckBState.queue] },
+          }
+        }
+      }
+    }
+  }),
+
+  loadSet: (setId) => set(s => {
+    const setNode = s.fsNodes[setId]
+    if (!setNode || setNode.type !== 'set' || !setNode.deckConfig) return s
+    const cfg = setNode.deckConfig
+    // Collect all tracks from the set for library import
+    const allSetTracks = []
+    if (cfg.deckA.track) allSetTracks.push(cfg.deckA.track)
+    if (cfg.deckB.track) allSetTracks.push(cfg.deckB.track)
+    cfg.deckA.queue.forEach(t => allSetTracks.push(t))
+    cfg.deckB.queue.forEach(t => allSetTracks.push(t))
+    // Dedup with existing library
+    const existingPaths = new Set(s.library.map(t => t.path))
+    const newTracks = allSetTracks.filter(t => t && !existingPaths.has(t.path))
+    return {
+      library: [...s.library, ...newTracks],
+      libraryView: 'set',
+      libraryFilterId: setId,
+      deckA: {
+        ...s.deckA,
+        track: cfg.deckA.track,
+        queue: cfg.deckA.queue,
+        isPlaying: false,
+        position: 0,
+      },
+      deckB: {
+        ...s.deckB,
+        track: cfg.deckB.track,
+        queue: cfg.deckB.queue,
+        isPlaying: false,
+        position: 0,
+      },
+    }
+  }),
+
+  // ─── Import to Library ─────────────────────────────────────────────────────
+  importToLibrary: (itemId) => set(s => {
+    const node = s.fsNodes[itemId]
+    if (!node) return s
+    const existingPaths = new Set(s.library.map(t => t.path))
+    const newTracks = []
+
+    const collectTracks = (nid) => {
+      const n = s.fsNodes[nid]
+      if (!n) return
+      if (n.type === 'track' && n.trackData && !existingPaths.has(n.trackData.path)) {
+        newTracks.push(n.trackData)
+        existingPaths.add(n.trackData.path)
+      } else if (n.type === 'folder') {
+        n.children.forEach(cid => collectTracks(cid))
+      } else if (n.type === 'set' && n.deckConfig) {
+        const cfg = n.deckConfig
+        const tracks = [cfg.deckA.track, cfg.deckB.track, ...cfg.deckA.queue, ...cfg.deckB.queue].filter(Boolean)
+        tracks.forEach(t => {
+          if (!existingPaths.has(t.path)) {
+            newTracks.push(t)
+            existingPaths.add(t.path)
+          }
+        })
+      }
+    }
+    collectTracks(itemId)
+    if (newTracks.length === 0) return s
+    return { library: [...s.library, ...newTracks] }
+  }),
 }), {
   name: 'dj-knob-state',
   partialize: (state) => ({
@@ -266,15 +586,21 @@ export const useAppStore = create(persist((set, get) => ({
       mid: state.deckB.mid,
       bass: state.deckB.bass,
     },
+    fsNodes: state.fsNodes,
+    allTags: state.allTags,
+    trackTags: state.trackTags,
   }),
   merge: (persisted, current) => {
     if (!persisted) return current
-    const { _deckA, _deckB, ...rest } = persisted
+    const { _deckA, _deckB, fsNodes, allTags, trackTags, ...rest } = persisted
     return {
       ...current,
       ...rest,
       deckA: { ...current.deckA, ...(_deckA || {}) },
       deckB: { ...current.deckB, ...(_deckB || {}) },
+      fsNodes: fsNodes || current.fsNodes,
+      allTags: allTags || current.allTags,
+      trackTags: trackTags || current.trackTags,
     }
   },
 }))
