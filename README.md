@@ -9,7 +9,7 @@
   </p>
 </div>
 
-DiscoverTube DJ is a powerful, desktop-based DJ application built with Electron, React, and Vite. It bridges the gap between hardware MIDI controllers (like the ION Discover DJ) and digital mixing, offering a seamless interface for local audio file playback and on-the-fly music searching and downloading from YouTube.
+DiscoverTube DJ is a powerful, desktop-based DJ application built with Electron, React, and Vite. It bridges the gap between hardware MIDI controllers (like the ION Discover DJ) and digital mixing, offering a seamless interface for local audio file playback, AI stem separation, on-the-fly music searching and downloading from YouTube.
 
 <div align="center">
   <h3>Screenshot</h3>
@@ -25,7 +25,12 @@ DiscoverTube DJ is a powerful, desktop-based DJ application built with Electron,
 ## 🎛️ Features
 
 - **Dual-Deck Audio Engine**: Real-time scratching, pitch bending, EQ (Treble/Bass), and crossfading powered by the Web Audio API.
+- **AI-Powered Stem Separation**: Instantly isolate Vocals, Drums, Bass, and Other instruments from any track on the fly (powered by Demucs).
+- **Advanced FX Engine**: Built-in dynamic audio effects including Echo, Reverb, Filter, Modulation, and Repeat.
 - **Hardware MIDI Integration**: Connect your USB DJ Controller. Features an intuitive MIDI Learn system to instantly map physical knobs, jog wheels, and buttons to software actions.
+- **Smart Browse Modal**: Advanced file system browsing, tag searching, and modal-based library management.
+- **Synced Lyrics (Subtitles)**: Real-time karaoke-style lyrics display synchronized with track playback.
+- **Settings Configuration**: Customize storage paths and toggle auto-processing behaviors via a dedicated settings modal.
 - **Dynamic Track Library**: Load music directly from local folders or individual files.
 - **Instant YouTube Fetching**: Search for any song on YouTube and download it directly into your deck without leaving the app.
 

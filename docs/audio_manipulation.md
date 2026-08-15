@@ -32,3 +32,21 @@ The app maintains a `visualAngle` property for each deck:
 - **During Normal Playback:** `Deck.js` calculates a fake 33⅓ RPM motor speed (200 degrees/second) and automatically increments `visualAngle`.
 - **During Scratching:** When the jog wheel is manipulated, `DJController.js` instantly overrides the motor, adding the raw MIDI hardware delta directly to `visualAngle`.
 - **Result:** The UI wheel effortlessly transitions between acting like a motorized turntable and physically tracking the user's hand movements 1:1.
+
+## AI Stem Separation
+DiscoverTube DJ integrates a powerful stem separation engine powered by **Demucs**. This allows you to dynamically isolate Vocals, Drums, Bass, and Other instruments from any track.
+1. When a separation is requested, the frontend `StemSeparator.js` converts the track's `AudioBuffer` into a WAV format.
+2. The WAV data is sent to the Main Process (via IPC), which delegates the heavy lifting to the Demucs AI model.
+3. Once the stems are successfully separated and saved to disk, they are decoded back into discrete `AudioBuffer`s and fed into the audio engine for playback.
+
+To optimize system resources, the Demucs AI process runs in a dedicated background worker (`demucsWorker.mjs`). This worker is spawned on-demand. If the worker remains idle for 60 seconds without any active separation tasks, it automatically terminates itself to free up memory, and will be transparently respawned the next time a separation is requested.
+
+You can easily add tracks to the separation queue by dragging and dropping a song directly into the **AI Stems Manager**. 
+
+## Dynamic FX Engine
+The audio architecture now includes an `FXChain.js` processing pipeline. It inserts specialized web audio nodes into the routing path to apply dynamic, real-time effects:
+- **Filter**: High-pass and Low-pass sweeping.
+- **Echo / Delay**: Time-based rhythmic repetitions.
+- **Modulation**: Flanger and Chorus effects.
+- **Repeat**: Granular loop repeating.
+- **Reverb**: Spatial ambiance.
