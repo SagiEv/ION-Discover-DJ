@@ -140,6 +140,20 @@ export default function App() {
   // Load default library on mount or when directory changes
   const setLibrary = useAppStore(s => s.setLibrary)
   const rootSongsDir = useAppStore(s => s.settings.rootSongsDir)
+  const updateSettings = useAppStore(s => s.updateSettings)
+
+  useEffect(() => {
+    if (window.electronAPI.getDefaultPaths) {
+      window.electronAPI.getDefaultPaths().then(paths => {
+        if (paths) {
+          updateSettings({ 
+            rootSongsDir: paths.songsDir,
+            stemsDir: paths.stemsDir
+          })
+        }
+      }).catch(e => console.error('Failed to get default paths', e))
+    }
+  }, [updateSettings])
   
   useEffect(() => {
     window.electronAPI.loadDefaultLibrary(useAppStore.getState().settings).then(items => {

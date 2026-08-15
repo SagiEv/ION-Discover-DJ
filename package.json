@@ -1,6 +1,6 @@
 {
   "name": "discovertubedj",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "ION Discovery DJ × Youtube — local file DJ app",
   "main": "electron/main.js",
   "scripts": {
@@ -38,6 +38,7 @@
   "build": {
     "appId": "com.discovertubedj.app",
     "productName": "DiscoverTube DJ",
+    "executableName": "DiscoverTubeDJ",
     "directories": {
       "output": "dist-app"
     },
@@ -48,6 +49,20 @@
     "win": {
       "target": "nsis",
       "icon": "public/icon.ico"
-    }
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "installerIcon": "public/icon.ico",
+      "uninstallerIcon": "public/icon.ico",
+      "installerSidebar": "build/installerSidebar.bmp",
+      "uninstallerSidebar": "build/uninstallerSidebar.bmp",
+      "installerHeaderIcon": "public/icon.ico",
+      "include": "build/installer.nsh"
+    },
+    "asarUnpack": [
+      "**/node_modules/demucs/**/*",
+      "**/node_modules/onnxruntime-node/**/*"
+    ]
   }
 }
