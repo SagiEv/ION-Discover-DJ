@@ -967,9 +967,23 @@ input.browser__search-input {
 
 /* Scratch button */
 .hw-btn--scratch {
-  min-width: 28px;
-  padding: 6px;
-  font-size: 12px;
+  width: 36px;
+  height: 36px;
+  min-width: unset;
+  padding: 0;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  transition: all 0.15s ease;
+}
+
+.hw-btn--scratch.active--scratch {
+  border-color: #f7e018;
+  box-shadow: 0 0 12px rgba(247, 224, 24, 0.8), inset 0 0 6px rgba(247, 224, 24, 0.5);
+  color: #f7e018;
+  text-shadow: 0 0 5px rgba(247, 224, 24, 0.8);
 }
 
 /* ─── Knob Column (per-deck vertical) ───────────────────────────────────────── */
@@ -1131,7 +1145,7 @@ input.browser__search-input {
 .crossfader-wrap {
   display: flex;
   justify-content: center;
-  padding: 10px 60px 4px;
+  padding: 28px 60px 4px;
   position: relative;
   z-index: 1;
 }
@@ -2353,3 +2367,154 @@ input.browser__search-input {
 
 .browser__item--back { justify-content: center; font-weight: bold; color: var(--accent-a); border-bottom: 1px solid rgba(255, 255, 255, 0.05); }
 
+/* ─── Settings Modal ───────────────────────────────────────────────────────── */
+.settings-modal {
+  width: 500px;
+  max-width: 90vw;
+}
+
+.settings-body {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  margin-top: 10px;
+}
+
+.settings-group h3 {
+  font-size: 13px;
+  color: var(--accent-a);
+  margin-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 6px;
+}
+
+.setting-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+.setting-item label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.setting-item small {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.input-with-button {
+  display: flex;
+  gap: 8px;
+}
+.input-with-button input {
+  flex: 1;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  padding: 6px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-family: var(--font-ui);
+}
+.input-with-button input:focus {
+  outline: none;
+  border-color: var(--accent-a);
+}
+
+.browse-btn {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  border: 1px solid var(--border-bright);
+  padding: 0 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 500;
+  transition: all 0.2s;
+}
+.browse-btn:hover {
+  background: var(--bg-raised);
+  border-color: var(--accent-a);
+  color: var(--accent-a);
+}
+
+.toggle-item {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+/* Toggle Switch css */
+.toggle-switch {
+  position: relative;
+  display: inline-block;
+  width: 36px;
+  height: 20px;
+}
+.toggle-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+.slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background-color: var(--bg-raised);
+  border: 1px solid var(--border);
+  transition: .4s;
+  border-radius: 20px;
+}
+.slider:before {
+  position: absolute;
+  content: "";
+  height: 14px;
+  width: 14px;
+  left: 2px;
+  bottom: 2px;
+  background-color: var(--text-muted);
+  transition: .4s;
+  border-radius: 50%;
+}
+input:checked + .slider {
+  background-color: rgba(29, 185, 84, 0.2);
+  border-color: var(--accent-a);
+}
+input:checked + .slider:before {
+  transform: translateX(16px);
+  background-color: var(--accent-a);
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+.modal-header h2 {
+  margin: 0;
+  font-size: 16px;
+}
+.close-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 20px;
+  cursor: pointer;
+  padding: 4px;
+  line-height: 1;
+  border-radius: 4px;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+}
+.close-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}

@@ -116,6 +116,14 @@ ipcMain.handle('open-audio-folder', async () => {
   return results
 })
 
+// ─── IPC: Select directory ──────────────────────────────────────────────────
+ipcMain.handle('select-directory', async () => {
+  const { filePaths } = await dialog.showOpenDialog({
+    properties: ['openDirectory']
+  })
+  return filePaths[0] || null
+})
+
 // ─── IPC: Read audio file as ArrayBuffer ────────────────────────────────────
 ipcMain.handle('read-audio-file', async (_, filePath) => {
   const buffer = fs.readFileSync(filePath)
@@ -127,13 +135,16 @@ const { execFile } = require('child_process')
 const util = require('util')
 const execFileAsync = util.promisify(execFile)
 
-ipcMain.handle('check-stems', (_, trackId) => {
+ipcMain.handle('check-stems', (_, trackId, settings) => {
   if (!trackId) return null
   
   const devDir = path.join('D:\\SpotifyDJ_Stems', trackId)
   const prodDir = path.join(app.getPath('userData'), 'stems', trackId)
   
+  const primaryStemsDir = settings?.stemsDir ? path.join(settings.stemsDir, trackId) : (isDev ? devDir : prodDir)
+
   const checkDir = (stemsDir) => {
+    if (!stemsDir) return null
     const result = {
       vocals: path.join(stemsDir, 'vocals.wav'),
       drums: path.join(stemsDir, 'drums.wav'),
@@ -146,12 +157,15 @@ ipcMain.handle('check-stems', (_, trackId) => {
     return null
   }
 
-  // Always prefer the environment's target directory first
-  const primaryResult = checkDir(isDev ? devDir : prodDir)
+  // Always prefer the environment's target directory or user setting first
+  const primaryResult = checkDir(primaryStemsDir)
   if (primaryResult) return primaryResult
 
-  // Fallback to the other directory so old stems are not lost
-  return checkDir(isDev ? prodDir : devDir)
+  // Fallback to the other directory so old stems are not lost (only if no custom setting)
+  if (!settings?.stemsDir) {
+    return checkDir(isDev ? prodDir : devDir)
+  }
+  return null
 })
 
 let demucsWorker = null
@@ -220,7 +234,7 @@ ipcMain.on('cancel-demucs', (event, trackId) => {
   }
 })
 
-ipcMain.handle('separate-stems', async (event, wavBuffer, trackId) => {
+ipcMain.handle('separate-stems', async (event, wavBuffer, trackId, settings) => {
   const execute = async () => {
     const tempDir = isDev ? 'D:\\SpotifyDJ_Temp' : app.getPath('temp')
     if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true })
@@ -250,7 +264,7 @@ ipcMain.handle('separate-stems', async (event, wavBuffer, trackId) => {
       
       let finalStemsDir = sourceStemsDir
       if (trackId) {
-        const baseStemsDir = isDev ? 'D:\\SpotifyDJ_Stems' : path.join(app.getPath('userData'), 'stems')
+        const baseStemsDir = settings?.stemsDir || (isDev ? 'D:\\SpotifyDJ_Stems' : path.join(app.getPath('userData'), 'stems'))
         finalStemsDir = path.join(baseStemsDir, trackId)
         if (!fs.existsSync(finalStemsDir)) {
           fs.mkdirSync(finalStemsDir, { recursive: true })
@@ -343,7 +357,7 @@ ipcMain.handle('search-youtube-suggestions', async (_, query) => {
     return []
   }
 })
-ipcMain.handle('search-youtube', async (_, query) => {
+ipcMain.handle('search-youtube', async (_, query, settings) => {
   try {
     const r = await ytSearch(query)
     if (!r || !r.videos || r.videos.length === 0) {
@@ -355,9 +369,9 @@ ipcMain.handle('search-youtube', async (_, query) => {
     const videoId = video.videoId
     
     // Save to userData/songs in production, so we don't write to read-only ASAR
-    const songsDir = isDev 
+    const songsDir = settings?.rootSongsDir || (isDev 
       ? path.join(__dirname, '../songs')
-      : path.join(app.getPath('userData'), 'songs')
+      : path.join(app.getPath('userData'), 'songs'))
     if (!fs.existsSync(songsDir)) {
       fs.mkdirSync(songsDir, { recursive: true })
     }
@@ -424,11 +438,22 @@ ipcMain.handle('search-youtube', async (_, query) => {
   }
 })
 
-// ─── IPC: Load Default Library ──────────────────────────────────────────────
-ipcMain.handle('load-default-library', async () => {
+ipcMain.handle('get-default-paths', () => {
   const songsDir = isDev 
     ? path.join(__dirname, '../songs')
     : path.join(app.getPath('userData'), 'songs')
+  
+  const stemsDir = isDev 
+    ? 'D:\\SpotifyDJ_Stems'
+    : path.join(app.getPath('userData'), 'stems')
+
+  return { songsDir, stemsDir }
+})
+
+ipcMain.handle('load-default-library', async (_, settings) => {
+  const songsDir = settings?.rootSongsDir || (isDev 
+    ? path.join(__dirname, '../songs')
+    : path.join(app.getPath('userData'), 'songs'))
   if (!fs.existsSync(songsDir)) return []
   
   const exts = new Set(['.mp3', '.flac', '.wav', '.ogg', '.aac', '.m4a', '.webm'])

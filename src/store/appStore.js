@@ -73,6 +73,15 @@ export const useAppStore = create(persist((set, get) => ({
     pressedButtons: { ...s.pressedButtons, [action]: isPressed }
   })),
 
+  // ─── Settings ───────────────────────────────────────────────────────────────
+  settings: {
+    rootSongsDir: '',
+    stemsDir: '',
+    autoProcessStems: true,
+  },
+  updateSettings: (patch) => set(s => ({ settings: { ...s.settings, ...patch } })),
+
+
   // ─── Decks ──────────────────────────────────────────────────────────────────
   deckA: makeDeckState(),
   deckB: makeDeckState(),
@@ -140,6 +149,7 @@ export const useAppStore = create(persist((set, get) => ({
 
   // ─── Library ────────────────────────────────────────────────────────────────
   library: [],          // [{ name, path, duration, bpm }]
+  setLibrary: (tracks) => set({ library: tracks }),
   addTracks: (tracks) => set(state => ({
     library: [...state.library, ...tracks.filter(t =>
       !state.library.some(e => e.path === t.path)
@@ -586,18 +596,20 @@ export const useAppStore = create(persist((set, get) => ({
       mid: state.deckB.mid,
       bass: state.deckB.bass,
     },
+    settings: state.settings,
     fsNodes: state.fsNodes,
     allTags: state.allTags,
     trackTags: state.trackTags,
   }),
   merge: (persisted, current) => {
     if (!persisted) return current
-    const { _deckA, _deckB, fsNodes, allTags, trackTags, ...rest } = persisted
+    const { _deckA, _deckB, fsNodes, allTags, trackTags, settings, ...rest } = persisted
     return {
       ...current,
       ...rest,
       deckA: { ...current.deckA, ...(_deckA || {}) },
       deckB: { ...current.deckB, ...(_deckB || {}) },
+      settings: settings || current.settings,
       fsNodes: fsNodes || current.fsNodes,
       allTags: allTags || current.allTags,
       trackTags: trackTags || current.trackTags,

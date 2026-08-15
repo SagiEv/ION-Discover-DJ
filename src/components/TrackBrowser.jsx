@@ -142,16 +142,23 @@ export function TrackBrowser() {
     addToast(`Downloading: ${query}...`, 'info', 6000)
 
     try {
-      const trackInfo = await window.electronAPI.searchYouTube(query)
-      addTracks([{
+      const trackInfo = await window.electronAPI.searchYouTube(query, useAppStore.getState().settings)
+      const newTrack = {
         path: trackInfo.path,
         name: trackInfo.name,
         videoId: trackInfo.videoId,
         duration: 0,
         bpm: 0,
-      }])
+      }
+      addTracks([newTrack])
       setBrowseIndex(library.length)
       setSearchQuery('')
+
+      // Auto-queue stems if enabled
+      const { settings, queueStemProcessAsync } = useAppStore.getState()
+      if (settings?.autoProcessStems) {
+        queueStemProcessAsync(newTrack)
+      }
 
       // Notify download complete
       addToast(`Downloaded: ${trackInfo.name}`, 'success', 4000)
