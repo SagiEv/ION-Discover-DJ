@@ -118,7 +118,10 @@ class DJController {
   // ─── Play / Stutter ────────────────────────────────────────────────────────
   playStutter(deckId) {
     const deck = this._deck(deckId)
-    if (!deck.originalBuffer) return
+    if (!deck.originalBuffer) {
+      this._playNextInQueue(deckId)
+      return
+    }
     this.engine.resume()
     if (deck.isPlaying) {
       deck.stutter()
@@ -146,7 +149,10 @@ class DJController {
 
   togglePlay(deckId) {
     const deck = this._deck(deckId)
-    if (!deck.originalBuffer) return
+    if (!deck.originalBuffer) {
+      this._playNextInQueue(deckId)
+      return
+    }
     if (deck.isPlaying) {
       this.pause(deckId)
     } else {
