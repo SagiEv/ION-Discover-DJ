@@ -637,7 +637,8 @@ class DJController {
   // ─── Browse knob ──────────────────────────────────────────────────────────
   browseTurn(delta) {
     const store = useAppStore.getState()
-    const newIndex = Math.max(0, Math.min(store.library.length - 1, store.browseIndex + delta))
+    const maxIndex = Math.max(0, store.browseListCount - 1)
+    const newIndex = Math.max(0, Math.min(maxIndex, store.browseIndex + delta))
     store.setBrowseIndex(newIndex)
     // Accumulate visual rotation for the browse knob (30° per step)
     useAppStore.setState({ browseAngle: store.browseAngle + delta * 30 })
@@ -772,7 +773,7 @@ class DJController {
         this.browseTurn(rawVal > 64 ? -1 : 1)
         break
       case 'browse_press':
-        if (isOn) { /* expand folder / load logic */ }
+        if (isOn) useAppStore.getState().toggleBrowse()
         break
       case 'scratch_toggle':
         // The hardware button acts as a latch (maintains its own state).
@@ -784,8 +785,9 @@ class DJController {
 
   _loadSelectedToDeck(deckId) {
     const store = useAppStore.getState()
-    const track = store.library[store.browseIndex]
-    if (track) this.loadTrack(deckId, track)
+    if (store.activeLoadCallback) {
+      store.activeLoadCallback(deckId, store.browseIndex)
+    }
   }
 
   _deck(id) {

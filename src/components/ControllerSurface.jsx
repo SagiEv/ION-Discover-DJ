@@ -256,12 +256,14 @@ function BrowseKnob() {
   const browseAngle = useAppStore(s => s.browseAngle)
   const dragStart = useRef(null)
   const accumulated = useRef(0)
+  const didDrag = useRef(false)
   const size = 50
 
   const handleMouseDown = useCallback((e) => {
     e.preventDefault()
     dragStart.current = e.clientX
     accumulated.current = 0
+    didDrag.current = false
 
     const handleMouseMove = (e) => {
       if (dragStart.current === null) return
@@ -271,6 +273,7 @@ function BrowseKnob() {
       // Every 20px of drag = one browse step
       const steps = Math.trunc(accumulated.current / 20)
       if (steps !== 0) {
+        didDrag.current = true
         for (let i = 0; i < Math.abs(steps); i++) {
           dj.browseTurn(steps > 0 ? 1 : -1)
         }
@@ -279,8 +282,13 @@ function BrowseKnob() {
     }
 
     const handleMouseUp = () => {
+      // If user didn't drag, treat as a click → toggle browse modal
+      if (!didDrag.current) {
+        useAppStore.getState().toggleBrowse()
+      }
       dragStart.current = null
       accumulated.current = 0
+      didDrag.current = false
       document.removeEventListener('mousemove', handleMouseMove)
       document.removeEventListener('mouseup', handleMouseUp)
     }
@@ -295,19 +303,21 @@ function BrowseKnob() {
   }, [])
 
   return (
-    <div className="knob-wrap-hw">
+    <div className="knob-wrap-hw" style={{ position: 'relative' }}>
       <label className="knob-label-hw">BROWSE</label>
       <div
-        className="knob-hw"
+        className="knob-hw knob-hw--pressable"
         style={{ width: size, height: size }}
         onMouseDown={handleMouseDown}
         onWheel={handleWheel}
+        title="Click to open Browser · Drag to scroll"
       >
         <div
           className="knob-hw__pointer"
           style={{ transform: `rotate(${browseAngle}deg)` }}
         />
         <div className="knob-hw__dot" />
+        <div className="knob-hw__press-hint" />
       </div>
     </div>
   )
