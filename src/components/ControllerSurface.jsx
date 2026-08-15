@@ -364,9 +364,7 @@ function CenterSection() {
           className={`hw-btn hw-btn--scratch ${scratchMode ? 'active--scratch' : ''} ${pressed['scratch_toggle'] ? 'hw-btn--pressed' : ''}`}
           onClick={() => dj.toggleScratchMode()}
           title="Scratch / Search"
-        >
-          {scratchMode ? '●' : '○'}
-        </button>
+        />
         <button
           className={`hw-btn hw-btn--load ${pressed['load_B'] ? 'hw-btn--pressed' : ''}`}
           onClick={() => dj._loadSelectedToDeck('B')}
