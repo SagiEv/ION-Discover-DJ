@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, protocol } = require('electron')
+const { app, BrowserWindow, ipcMain, dialog, protocol, utilityProcess } = require('electron')
 const path = require('path')
 const fs = require('fs')
 const url = require('url')
@@ -175,9 +175,7 @@ let demucsQueuePromise = Promise.resolve()
 
 function startDemucsWorker() {
   if (demucsWorker) return
-  const env = Object.assign({}, process.env, { ELECTRON_RUN_AS_NODE: '1' })
-  demucsWorker = require('child_process').fork(path.join(__dirname, 'demucsWorker.mjs'), [], { 
-    env,
+  demucsWorker = utilityProcess.fork(path.join(__dirname, 'demucsWorker.mjs'), [], { 
     execArgv: ['--max-old-space-size=8192'] 
   })
   
@@ -236,7 +234,8 @@ ipcMain.on('cancel-demucs', (event, trackId) => {
 
 ipcMain.handle('separate-stems', async (event, wavBuffer, trackId, settings) => {
   const execute = async () => {
-    const tempDir = isDev ? 'D:\\SpotifyDJ_Temp' : app.getPath('temp')
+    const baseStemsDir = settings?.stemsDir || (isDev ? 'D:\\SpotifyDJ_Stems' : path.join(app.getPath('userData'), 'stems'))
+    const tempDir = path.join(baseStemsDir, '.temp')
     if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true })
     
     const inputWav = path.join(tempDir, `demucs_in_${Date.now()}.wav`)
@@ -252,7 +251,7 @@ ipcMain.handle('separate-stems', async (event, wavBuffer, trackId, settings) => 
       
       const sourceStemsDir = await new Promise((resolve, reject) => {
         currentDemucsTask = { trackId, resolve, reject, inputWav, outDir }
-        demucsWorker.send({ type: 'process', inputPath: inputWav, outputDir: outDir, trackId })
+        demucsWorker.postMessage({ type: 'process', inputPath: inputWav, outputDir: outDir, trackId })
       })
       
       if (!fs.existsSync(path.join(sourceStemsDir, 'vocals.wav')) || 
@@ -264,7 +263,6 @@ ipcMain.handle('separate-stems', async (event, wavBuffer, trackId, settings) => 
       
       let finalStemsDir = sourceStemsDir
       if (trackId) {
-        const baseStemsDir = settings?.stemsDir || (isDev ? 'D:\\SpotifyDJ_Stems' : path.join(app.getPath('userData'), 'stems'))
         finalStemsDir = path.join(baseStemsDir, trackId)
         if (!fs.existsSync(finalStemsDir)) {
           fs.mkdirSync(finalStemsDir, { recursive: true })
@@ -283,6 +281,7 @@ ipcMain.handle('separate-stems', async (event, wavBuffer, trackId, settings) => 
       }
     } catch (error) {
       console.error('[StemSeparator IPC] Error:', error)
+      dialog.showErrorBox('Stem Separation Failed', error.message || String(error))
       return null
     } finally {
       try {
@@ -439,13 +438,31 @@ ipcMain.handle('search-youtube', async (_, query, settings) => {
 })
 
 ipcMain.handle('get-default-paths', () => {
-  const songsDir = isDev 
+  let regSongsDir = null;
+  let regStemsDir = null;
+
+  if (!isDev && process.platform === 'win32') {
+    try {
+      const { execSync } = require('child_process');
+      const res = execSync('reg query HKCU\\Software\\discovertubedj /v SongsPath', { encoding: 'utf8' });
+      const match = res.match(/SongsPath\s+REG_SZ\s+(.*)/);
+      if (match && match[1].trim()) regSongsDir = match[1].trim();
+    } catch (e) {}
+    try {
+      const { execSync } = require('child_process');
+      const res = execSync('reg query HKCU\\Software\\discovertubedj /v StemsPath', { encoding: 'utf8' });
+      const match = res.match(/StemsPath\s+REG_SZ\s+(.*)/);
+      if (match && match[1].trim()) regStemsDir = match[1].trim();
+    } catch (e) {}
+  }
+
+  const songsDir = regSongsDir || (isDev 
     ? path.join(__dirname, '../songs')
-    : path.join(app.getPath('userData'), 'songs')
+    : path.join(app.getPath('userData'), 'songs'))
   
-  const stemsDir = isDev 
+  const stemsDir = regStemsDir || (isDev 
     ? 'D:\\SpotifyDJ_Stems'
-    : path.join(app.getPath('userData'), 'stems')
+    : path.join(app.getPath('userData'), 'stems'))
 
   return { songsDir, stemsDir }
 })

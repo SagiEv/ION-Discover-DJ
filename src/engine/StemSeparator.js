@@ -110,8 +110,9 @@ export async function processStems(audioBuffer, audioEngine, trackId) {
     audioBuffer = null // Free memory
     
     console.log('[StemSeparator] Sending WAV to main process for separation...')
+    const { settings } = useAppStore.getState()
     // We need an IPC call to save the buffer and run demucs
-    stemPaths = await window.electronAPI.separateStems(wavBuffer, trackId)
+    stemPaths = await window.electronAPI.separateStems(wavBuffer, trackId, settings)
     wavBuffer = null // Free memory
   } else {
     console.log('[StemSeparator] Found existing stems on disk!')
@@ -178,7 +179,8 @@ export async function processLibraryTrackStems(track, audioEngine) {
   console.log(`[StemSeparator] Background queue starting separation...`)
   updateStemProgress(trackId, { progress: 'Sending to AI engine...' })
   checkCancelled()
-  const stemPaths = await window.electronAPI.separateStems(wavBuffer, trackId)
+  const { settings } = useAppStore.getState()
+  const stemPaths = await window.electronAPI.separateStems(wavBuffer, trackId, settings)
   wavBuffer = null // Free memory
   
   if (!stemPaths) {

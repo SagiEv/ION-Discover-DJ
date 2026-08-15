@@ -9,14 +9,22 @@ let model = null;
 async function ensureModel() {
     if (!model) {
         console.log('Loading model...');
-        // In packaged app, this path might change, but for now we follow the same logic as cli.js
-        const weightsPath = path.join(import.meta.dirname, '../node_modules/demucs/htdemucs.onnx');
+        let weightsPath = path.join(import.meta.dirname, '../node_modules/demucs/htdemucs.onnx');
+        weightsPath = weightsPath.replace(/app\.asar/g, 'app.asar.unpacked');
         model = await ONNXHTDemucs.init(weightsPath);
     }
     return model;
 }
 
-process.on('message', async (msg) => {
+// Support both utilityProcess and child_process.fork
+const port = process.parentPort || process;
+const send = (msg) => {
+    if (process.parentPort) process.parentPort.postMessage(msg);
+    else process.send(msg);
+};
+
+port.on('message', async (e) => {
+    const msg = e.data || e;
     if (msg.type === 'process') {
         const { inputPath, outputDir, trackId, overlap = 0.25 } = msg;
         try {
@@ -26,7 +34,7 @@ process.on('message', async (msg) => {
             const rawAudio = wavToSamples(inputBuffer);
             
             function progress(step, total) {
-                process.send({ type: 'progress', trackId, progress: `${step}/${total}` });
+                send({ type: 'progress', trackId, progress: `${step}/${total}` });
             }
             
             const tracks = await separateTracks(model, rawAudio, progress, overlap);
@@ -38,9 +46,9 @@ process.on('message', async (msg) => {
                 let outputPath = path.join(outputDir, `${trackName}.wav`);
                 fs.writeFileSync(outputPath, wavBuffer);
             }
-            process.send({ type: 'done', trackId, outputDir });
+            send({ type: 'done', trackId, outputDir });
         } catch (err) {
-            process.send({ type: 'error', trackId, error: err.message || String(err) });
+            send({ type: 'error', trackId, error: err.message || String(err) });
         }
     }
 });
