@@ -14,6 +14,9 @@ if (!isDev) {
   youtubedl = youtubedl.create(ytPath)
 }
 
+// Increase memory limit for the renderer process (since it decodes large audio files and converts to WAV)
+app.commandLine.appendSwitch('js-flags', '--max-old-space-size=8192')
+
 function createWindow() {
   const win = new BrowserWindow({
     title: 'DiscoverTube DJ',
@@ -42,6 +45,18 @@ function createWindow() {
   } else {
     win.loadFile(path.join(__dirname, '../dist/renderer/index.html'))
   }
+
+  // Graceful handling of fatal renderer crashes (e.g. out of memory)
+  win.webContents.on('render-process-gone', (event, details) => {
+    console.error('Renderer process crashed:', details.reason, 'exit code:', details.exitCode)
+    dialog.showMessageBoxSync({
+      type: 'error',
+      title: 'Crash Detected',
+      message: 'The application encountered a fatal memory error and needs to restart.',
+      detail: `Reason: ${details.reason} (Code: ${details.exitCode})`
+    })
+    win.reload()
+  })
 }
 
 app.whenReady().then(() => {
@@ -147,7 +162,10 @@ let demucsQueuePromise = Promise.resolve()
 function startDemucsWorker() {
   if (demucsWorker) return
   const env = Object.assign({}, process.env, { ELECTRON_RUN_AS_NODE: '1' })
-  demucsWorker = require('child_process').fork(path.join(__dirname, 'demucsWorker.mjs'), [], { env })
+  demucsWorker = require('child_process').fork(path.join(__dirname, 'demucsWorker.mjs'), [], { 
+    env,
+    execArgv: ['--max-old-space-size=8192'] 
+  })
   
   demucsWorker.on('message', (msg) => {
     if (!currentDemucsTask) return

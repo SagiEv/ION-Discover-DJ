@@ -104,11 +104,13 @@ export async function processStems(audioBuffer, audioEngine, trackId) {
 
   if (!stemPaths) {
     console.log('[StemSeparator] Converting AudioBuffer to WAV...')
-    const wavBuffer = audioBufferToWav(audioBuffer)
+    let wavBuffer = audioBufferToWav(audioBuffer)
+    audioBuffer = null // Free memory
     
     console.log('[StemSeparator] Sending WAV to main process for separation...')
     // We need an IPC call to save the buffer and run demucs
     stemPaths = await window.electronAPI.separateStems(wavBuffer, trackId)
+    wavBuffer = null // Free memory
   } else {
     console.log('[StemSeparator] Found existing stems on disk!')
   }
@@ -148,13 +150,15 @@ export async function processLibraryTrackStems(track, audioEngine) {
   const arr = await window.electronAPI.readAudioFile(track.path)
   
   console.log(`[StemSeparator] Background queue decoding ${track.path}...`)
-  const audioBuffer = await audioEngine.decodeAudio(arr)
+  let audioBuffer = await audioEngine.decodeAudio(arr)
   
   console.log(`[StemSeparator] Background queue converting to WAV...`)
-  const wavBuffer = audioBufferToWav(audioBuffer)
+  let wavBuffer = audioBufferToWav(audioBuffer)
+  audioBuffer = null // Free memory
   
   console.log(`[StemSeparator] Background queue starting separation...`)
   const stemPaths = await window.electronAPI.separateStems(wavBuffer, trackId)
+  wavBuffer = null // Free memory
   
   if (!stemPaths) {
     throw new Error('Stem separation failed. Please check disk space or permissions.')

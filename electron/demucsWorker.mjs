@@ -11,8 +11,7 @@ async function ensureModel() {
         console.log('Loading model...');
         // In packaged app, this path might change, but for now we follow the same logic as cli.js
         const weightsPath = path.join(import.meta.dirname, '../node_modules/demucs/htdemucs.onnx');
-        let weights = fs.readFileSync(weightsPath).buffer;
-        model = await ONNXHTDemucs.init(weights);
+        model = await ONNXHTDemucs.init(weightsPath);
     }
     return model;
 }
