@@ -56,6 +56,18 @@ export function StemQueueModal({ onClose }) {
     checkLibraryStems()
   }, [library])
 
+  // Dynamically remove tracks from missing stems list if they successfully finish processing
+  useEffect(() => {
+    const newlyDone = stemQueue.filter(item => item.status === 'done').map(item => item.trackId)
+    if (newlyDone.length > 0) {
+      setAllMissingStems(prev => prev.filter(track => {
+        const id = getTrackId(track)
+        return id && !newlyDone.includes(id)
+      }))
+    }
+  }, [stemQueue])
+
+
   const queuedIds = new Set(stemQueue.map(item => item.trackId))
   const missingStems = allMissingStems.filter(track => {
     const trackId = getTrackId(track)

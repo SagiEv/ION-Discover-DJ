@@ -23,15 +23,23 @@ export function useStemOrchestrator() {
       updateStemProgress(nextItem.trackId, { status: 'processing', progress: 'Starting...' })
       
       try {
+        const state = useAppStore.getState()
+        if (state.deckA.track?.stemTrackId === nextItem.trackId) {
+          state.updateDeck('A', { stemsFailed: false })
+        }
+        if (state.deckB.track?.stemTrackId === nextItem.trackId) {
+          state.updateDeck('B', { stemsFailed: false })
+        }
+
         const engine = getDJController().engine
         await processLibraryTrackStems(nextItem.track, engine)
         updateStemProgress(nextItem.trackId, { status: 'done', progress: 'Complete' })
         
         // Auto-load into decks if they happen to be playing this track
-        const state = useAppStore.getState()
+        const currentState = useAppStore.getState()
         const dj = getDJController()
-        if (state.deckA.track?.stemTrackId === nextItem.trackId) dj.loadStemsFromDisk('A', nextItem.trackId)
-        if (state.deckB.track?.stemTrackId === nextItem.trackId) dj.loadStemsFromDisk('B', nextItem.trackId)
+        if (currentState.deckA.track?.stemTrackId === nextItem.trackId) dj.loadStemsFromDisk('A', nextItem.trackId)
+        if (currentState.deckB.track?.stemTrackId === nextItem.trackId) dj.loadStemsFromDisk('B', nextItem.trackId)
         
         // Notify user via in-app toast (safe, never throws)
         try {
