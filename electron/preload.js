@@ -4,6 +4,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   openAudioFiles: () => ipcRenderer.invoke('open-audio-files'),
   openAudioFolder: () => ipcRenderer.invoke('open-audio-folder'),
   selectDirectory: () => ipcRenderer.invoke('select-directory'),
+  getDefaultPaths: () => ipcRenderer.invoke('get-default-paths'),
   loadDefaultLibrary: (settings) => ipcRenderer.invoke('load-default-library', settings),
   searchYouTube: (query, settings) => ipcRenderer.invoke('search-youtube', query, settings),
   getSearchSuggestions: (query) => ipcRenderer.invoke('search-youtube-suggestions', query),

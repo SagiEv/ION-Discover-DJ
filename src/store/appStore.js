@@ -149,6 +149,7 @@ export const useAppStore = create(persist((set, get) => ({
 
   // ─── Library ────────────────────────────────────────────────────────────────
   library: [],          // [{ name, path, duration, bpm }]
+  setLibrary: (tracks) => set({ library: tracks }),
   addTracks: (tracks) => set(state => ({
     library: [...state.library, ...tracks.filter(t =>
       !state.library.some(e => e.path === t.path)

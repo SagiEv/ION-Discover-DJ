@@ -438,7 +438,18 @@ ipcMain.handle('search-youtube', async (_, query, settings) => {
   }
 })
 
-// ─── IPC: Load Default Library ──────────────────────────────────────────────
+ipcMain.handle('get-default-paths', () => {
+  const songsDir = isDev 
+    ? path.join(__dirname, '../songs')
+    : path.join(app.getPath('userData'), 'songs')
+  
+  const stemsDir = isDev 
+    ? 'D:\\SpotifyDJ_Stems'
+    : path.join(app.getPath('userData'), 'stems')
+
+  return { songsDir, stemsDir }
+})
+
 ipcMain.handle('load-default-library', async (_, settings) => {
   const songsDir = settings?.rootSongsDir || (isDev 
     ? path.join(__dirname, '../songs')

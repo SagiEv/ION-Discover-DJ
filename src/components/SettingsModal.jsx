@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useState, useEffect } from 'react'
 import { useAppStore } from '../store/appStore.js'
 import '../index.css'
 
@@ -28,9 +28,25 @@ export function SettingsModal({ onClose }) {
     updateSettings({ autoProcessStems: e.target.checked })
   }
 
+  const [defaultPaths, setDefaultPaths] = useState({ songsDir: '', stemsDir: '' })
+
+  useEffect(() => {
+    if (window.electronAPI && window.electronAPI.getDefaultPaths) {
+      window.electronAPI.getDefaultPaths().then(setDefaultPaths)
+    }
+  }, [])
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [onClose])
+
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content settings-modal" onClick={e => e.stopPropagation()}>
+      <div className="modal settings-modal" onClick={e => e.stopPropagation()}>
         <div className="modal-header">
           <h2>Settings</h2>
           <button className="close-btn" onClick={onClose}>×</button>
@@ -45,13 +61,15 @@ export function SettingsModal({ onClose }) {
               <div className="input-with-button">
                 <input 
                   type="text" 
-                  value={settings.rootSongsDir} 
-                  placeholder="Default (App Data)" 
+                  value={settings.rootSongsDir || ''} 
+                  placeholder={`Default (${defaultPaths.songsDir || 'Loading...'})`} 
                   onChange={e => updateSettings({ rootSongsDir: e.target.value })} 
                 />
                 <button onClick={handleBrowseSongs} className="browse-btn">Browse</button>
               </div>
-              <small>Directory where downloaded songs and subtitles will be saved.</small>
+              <small>
+                Directory where downloaded songs and subtitles will be saved.
+              </small>
             </div>
 
             <div className="setting-item">
@@ -59,13 +77,15 @@ export function SettingsModal({ onClose }) {
               <div className="input-with-button">
                 <input 
                   type="text" 
-                  value={settings.stemsDir} 
-                  placeholder="Default (App Data)" 
+                  value={settings.stemsDir || ''} 
+                  placeholder={`Default (${defaultPaths.stemsDir || 'Loading...'})`} 
                   onChange={e => updateSettings({ stemsDir: e.target.value })} 
                 />
                 <button onClick={handleBrowseStems} className="browse-btn">Browse</button>
               </div>
-              <small>Directory where separated AI stems (vocals, drums, etc.) will be stored.</small>
+              <small>
+                Directory where separated AI stems (vocals, drums, etc.) will be stored.
+              </small>
             </div>
           </div>
 

@@ -45,6 +45,14 @@ function TitleBar({ onOpenMidi, setShowStemQueue, setShowSettings }) {
 
   return (
     <div className="title-bar">
+      <button 
+        className="title-bar__settings-btn"
+        onClick={() => setShowSettings(true)}
+        title="Settings"
+        style={{ WebkitAppRegion: 'no-drag', background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center', marginRight: '10px' }}
+      >
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+      </button>
       <div className="title-bar__logo">DISCOVERTUBE DJ</div>
       <div className="title-bar__dot" />
       {scratchMode && (
@@ -63,14 +71,6 @@ function TitleBar({ onOpenMidi, setShowStemQueue, setShowSettings }) {
           title={activeCount > 0 ? stemQueue.map(s => `${s.track.name}: ${s.progress}`).join('\n') : 'Drag tracks here to pre-process stems'}
         >
           {activeCount > 0 ? `⏳ AI Stems Manager (${activeCount})` : '🎵 AI Stems Manager'}
-        </button>
-        <button 
-          className="title-bar__settings-btn"
-          onClick={() => setShowSettings(true)}
-          title="Settings"
-          style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center', marginLeft: '10px' }}
-        >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
         </button>
       </div>
 
@@ -137,8 +137,10 @@ export default function App() {
     checkDeck('B', deckB)
   }, [stemQueue, deckA, deckB])
 
-  // Load default library on mount
-  const addTracks = useAppStore(s => s.addTracks)
+  // Load default library on mount or when directory changes
+  const setLibrary = useAppStore(s => s.setLibrary)
+  const rootSongsDir = useAppStore(s => s.settings.rootSongsDir)
+  
   useEffect(() => {
     window.electronAPI.loadDefaultLibrary(useAppStore.getState().settings).then(items => {
       if (items && items.length > 0) {
@@ -154,10 +156,12 @@ export default function App() {
             bpm: 0,
           }
         })
-        addTracks(tracks)
+        setLibrary(tracks)
+      } else {
+        setLibrary([])
       }
     }).catch(e => console.error('Failed to load default library:', e))
-  }, [addTracks])
+  }, [setLibrary, rootSongsDir])
 
   return (
     <div className="app">
