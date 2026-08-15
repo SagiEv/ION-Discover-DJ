@@ -296,6 +296,16 @@ function ContentItem({ node, index, isSelected, innerRef, onNavigate, onContextM
               {trackTags.map(tag => <TagPill key={tag} tag={tag} small />)}
             </div>
           )}
+          {node.type === 'track' && node.trackData?.hasSubtitles && (
+            <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center' }} title="Has Subtitles">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 1, color: 'var(--accent-a)' }}>
+                <rect x="2" y="4" width="20" height="16" rx="2" ry="2"></rect>
+                <line x1="6" y1="10" x2="10" y2="10"></line>
+                <line x1="14" y1="10" x2="18" y2="10"></line>
+                <line x1="6" y1="14" x2="18" y2="14"></line>
+              </svg>
+            </div>
+          )}
         </div>
       </div>
       <div className="bm-content-item__actions">
@@ -567,8 +577,8 @@ export function BrowseModal() {
         handleClose()
       }
     }
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
+    window.addEventListener('keydown', handleKeyDown, true)
+    return () => window.removeEventListener('keydown', handleKeyDown, true)
   }, [browseOpen, showSaveSet, tagManagerTrack, showNewFolder, renamingId, contextMenu, addTrackMode, handleClose])
 
   const handleDoubleClick = useCallback((nodeId, node, forceLoadSet = false) => {
