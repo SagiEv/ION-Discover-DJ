@@ -601,6 +601,7 @@ export const useAppStore = create(persist((set, get) => ({
     crossfader: state.crossfader,
     masterVolume: state.masterVolume,
     eqMode: state.eqMode,
+    scratchModeEnabled: state.scratchModeEnabled,
     _deckA: {
       volume: state.deckA.volume,
       treble: state.deckA.treble,
