@@ -22,6 +22,7 @@ const genId = () => Date.now().toString(36) + '_' + Math.random().toString(36).s
 // ─── Deck slice ────────────────────────────────────────────────────────────────
 const makeDeckState = () => ({
   track: null,          // { name, path, duration, bpm, waveform }
+  isLoading: false,
   isPlaying: false,
   isReversed: false,
   isScratchMode: false,

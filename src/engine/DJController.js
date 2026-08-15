@@ -44,6 +44,13 @@ class DJController {
   // ─── Load a track onto a deck ──────────────────────────────────────────────
   async loadTrack(deckId, trackInfo) {
     const { path, name } = trackInfo
+
+    // Immediately update store for loading indication
+    useAppStore.getState().updateDeck(deckId, {
+      isLoading: true,
+      track: { ...trackInfo, waveform: null, bpm: 0 }
+    })
+
     await this.engine.resume()
 
     const arrayBuffer = await window.electronAPI.readAudioFile(path)
@@ -79,6 +86,7 @@ class DJController {
 
     useAppStore.getState().updateDeck(deckId, {
       track: { ...trackInfo, waveform, bpm, stemTrackId: trackId },
+      isLoading: false,
       isPlaying: false,
       position: 0,
       duration: audioBuffer.duration,

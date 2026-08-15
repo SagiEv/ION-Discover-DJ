@@ -7,6 +7,7 @@ const ACCENT = { A: '#1db954', B: '#3b82f6', cue: '#f59e0b' }
 export function WaveformView({ deckId }) {
   const canvasRef = useRef(null)
   const track = useAppStore(s => deckId === 'A' ? s.deckA.track : s.deckB.track)
+  const isLoading = useAppStore(s => deckId === 'A' ? s.deckA.isLoading : s.deckB.isLoading)
   const position = useAppStore(s => deckId === 'A' ? s.deckA.position : s.deckB.position)
   const duration = useAppStore(s => deckId === 'A' ? s.deckA.duration : s.deckB.duration)
   const cuePoint = useAppStore(s => deckId === 'A' ? s.deckA.cuePoint : s.deckB.cuePoint)
@@ -23,6 +24,10 @@ export function WaveformView({ deckId }) {
     ctx.clearRect(0, 0, W, H)
     ctx.fillStyle = '#0c0d16'
     ctx.fillRect(0, 0, W, H)
+
+    if (isLoading) {
+      return
+    }
 
     if (!track?.waveform) {
       // Empty state
@@ -81,11 +86,35 @@ export function WaveformView({ deckId }) {
     ctx.stroke()
     ctx.globalAlpha = 1
 
-  }, [track, position, cuePoint, duration, deckId, accent])
+  }, [track, isLoading, position, cuePoint, duration, deckId, accent])
 
   return (
-    <div className="deck__waveform">
+    <div className="deck__waveform" style={{ position: 'relative' }}>
       <canvas ref={canvasRef} />
+      {isLoading && (
+        <div style={{
+          position: 'absolute',
+          inset: 0,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: 'rgba(255, 255, 255, 0.8)',
+          fontFamily: 'system-ui, -apple-system, sans-serif',
+          fontSize: '14px',
+          fontWeight: 500,
+          animation: 'waveform-loading-pulse 1.5s ease-in-out infinite',
+          pointerEvents: 'none',
+          textShadow: '0 2px 4px rgba(0,0,0,0.5)'
+        }}>
+          Loading "{track?.name || 'Track'}"...
+        </div>
+      )}
+      <style>{`
+        @keyframes waveform-loading-pulse {
+          0%, 100% { opacity: 0.3; }
+          50% { opacity: 1; }
+        }
+      `}</style>
     </div>
   )
 }
