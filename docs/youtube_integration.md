@@ -13,7 +13,7 @@ When a user types a query into the `TrackBrowser` component, the following seque
 Once a user clicks a result to load it onto a deck, the download pipeline begins:
 1. The Main process receives the `videoId` and generates a full YouTube URL.
 2. It invokes `youtube-dl-exec` natively. 
-3. The flags `-x` and `--audio-format mp3` (or best audio) are used to strip out video streams, downloading only the highest quality audio payload directly to the OS's temporary directory (`os.tmpdir()`).
+3. The format flag `bestaudio[ext=webm]` is used to download the highest quality native Opus stream, avoiding the need for external MP3 encoders, and saves it directly to your configured Songs directory.
 
 ## Secure Local Streaming
 Because standard Chromium security protocols block a web application from accessing arbitrary paths on the user's hard drive (like `C:/Users/Temp/...`), the application cannot simply set an `<audio src="C:/...">`.
