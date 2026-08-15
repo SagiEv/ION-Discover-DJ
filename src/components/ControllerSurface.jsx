@@ -16,7 +16,8 @@ function StemProgress({ deckId }) {
     (!deckState.stemsFailed && !deckState.stemsProgress) ||
     lowerText.includes('done') || lowerText === 'complete'
 
-  const isFailed = deckState.stemsFailed
+  const isFailed = deckState.stemsFailed === true
+  const isCancelled = deckState.stemsFailed === 'cancelled'
 
   // Parse progress for active state
   let pct = 0
@@ -33,7 +34,7 @@ function StemProgress({ deckId }) {
 
   // Format text for user
   let displayText = progressText
-  let isProcessing = !isIdle && !isFailed
+  let isProcessing = !isIdle && !isFailed && !isCancelled
 
   if (lowerText.includes('wrote:')) {
     const fileMatch = progressText.match(/([^\\/]+)\.wav/i)
@@ -49,10 +50,13 @@ function StemProgress({ deckId }) {
   if (isFailed) {
     displayText = 'Stem separation failed'
     pct = 100
+  } else if (isCancelled) {
+    displayText = 'Stem separation cancelled'
+    pct = 100
   }
 
   const baseColor = isA ? '#1db954' : '#3b82f6'
-  const activeColor = isFailed ? '#ef4444' : baseColor
+  const activeColor = isFailed ? '#ef4444' : isCancelled ? '#eab308' : baseColor
 
   return (
     <div style={{ 
@@ -94,7 +98,7 @@ function StemProgress({ deckId }) {
         className={isProcessing ? 'stem-progress-pulse' : ''}
         style={{ 
         fontSize: '10px', 
-        color: isFailed ? '#ef4444' : '#888', 
+        color: isFailed ? '#ef4444' : isCancelled ? '#eab308' : '#888', 
         textAlign: isA ? 'left' : 'right', 
         fontFamily: 'monospace',
         whiteSpace: 'nowrap',
