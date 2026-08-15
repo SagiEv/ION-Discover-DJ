@@ -71,7 +71,10 @@ One of the standout features of DiscoverTube DJ is its ability to instantly pull
 You don't need to build the app from source to use it! 
 You can download the pre-packaged, ready-to-run Windows installer directly from the GitHub Releases page:
 
-**[Download DiscoverTube DJ v1.0.0 Setup (.exe) ⬇️](https://github.com/yourusername/discovertubedj/releases/latest)**
+**[Download DiscoverTube DJ v2.0.0 Setup (.exe) ⬇️](https://github.com/SagiEv/ION-Discover-DJ/releases/latest)**
+
+*Looking for the previous version?*
+**[Download DiscoverTube DJ v1.0.0 Setup (.exe) ⬇️](https://github.com/SagiEv/ION-Discover-DJ/releases#release-v1.0.0)**
 
 *(Simply download, run the installer, and plug in your controller!)*
 
