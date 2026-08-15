@@ -148,10 +148,12 @@ export default function App() {
           // Handle both old format (plain path string) and new format ({path, videoId})
           const p = typeof item === 'string' ? item : item.path
           const videoId = typeof item === 'object' ? item.videoId : undefined
+          const hasSubtitles = typeof item === 'object' ? item.hasSubtitles : false
           return {
             path: p,
             name: p.split(/[\\/]/).pop().replace(/\.[^.]+$/, ''),
             videoId: videoId || undefined,
+            hasSubtitles,
             duration: 0,
             bpm: 0,
           }

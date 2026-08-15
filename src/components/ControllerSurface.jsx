@@ -6,74 +6,35 @@ import { JogWheel } from './JogWheel.jsx'
 import { FXPanel } from './FXPanel.jsx'
 
 function StemProgress({ deckId }) {
+  const deckState = useAppStore(s => deckId === 'A' ? s.deckA : s.deckB)
   const isA = deckId === 'A'
-  const deckState = useAppStore(s => isA ? s.deckA : s.deckB)
 
-  // Show nothing if no track, stems are ready, or no progress to display
-  if (
-    !deckState.track || 
-    deckState.stemsReady || 
-    (!deckState.stemsFailed && !deckState.stemsProgress)
-  ) {
-    return <div style={{ width: '30%', height: '4px' }} /> // placeholder
-  }
-
-  // Handle failed state
-  if (deckState.stemsFailed) {
-    return (
-      <div style={{ width: '35%', display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '10px' }}>
-        <div style={{ 
-          width: '100%', 
-          height: '6px', 
-          background: '#1a1a1a', 
-          borderRadius: '3px', 
-          overflow: 'hidden', 
-          boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.8), 0 1px 0 rgba(255,255,255,0.05)',
-        }}>
-          <div style={{ 
-            width: '100%', 
-            height: '100%', 
-            background: '#ef4444', 
-            boxShadow: '0 0 8px rgba(239,68,68,0.5)'
-          }} />
-        </div>
-        <div style={{ 
-          fontSize: '10px', 
-          color: '#ef4444', 
-          textAlign: isA ? 'left' : 'right', 
-          fontFamily: 'monospace',
-        }}>
-          Stem separation failed
-        </div>
-      </div>
-    )
-  }
-
-  // Parse progress
   const progressText = deckState.stemsProgress || ''
   const lowerText = progressText.toLowerCase()
 
-  // Don't show if already done
-  if (lowerText.includes('done') || lowerText === 'complete') {
-    return <div style={{ width: '30%', height: '4px' }} />
-  }
+  const isIdle = !deckState.track || deckState.stemsReady || 
+    (!deckState.stemsFailed && !deckState.stemsProgress) ||
+    lowerText.includes('done') || lowerText === 'complete'
 
+  const isFailed = deckState.stemsFailed === true
+  const isCancelled = deckState.stemsFailed === 'cancelled'
+
+  // Parse progress for active state
   let pct = 0
-  const match = progressText.match(/(\d+)\/(\d+)/)
-  if (match) {
+  if (lowerText.includes('reading')) {
+    pct = 5
+  } else if (progressText.match(/^(\d+)\/(\d+)$/)) {
+    const match = progressText.match(/^(\d+)\/(\d+)$/)
     const curr = parseInt(match[1], 10)
     const total = parseInt(match[2], 10)
-    if (total > 0) pct = (curr / total) * 100
-  } else if (progressText.includes('%')) {
-    const m = progressText.match(/(\d+(\.\d+)?)%/)
-    if (m) pct = parseFloat(m[1])
+    pct = (curr / total) * 100
   } else if (lowerText.includes('writing')) {
     pct = 100
   }
 
   // Format text for user
   let displayText = progressText
-  let isProcessing = true
+  let isProcessing = !isIdle && !isFailed && !isCancelled
 
   if (lowerText.includes('wrote:')) {
     const fileMatch = progressText.match(/([^\\/]+)\.wav/i)
@@ -86,10 +47,25 @@ function StemProgress({ deckId }) {
     displayText = 'Finalizing files...'
   }
 
-  const color = isA ? '#1db954' : '#3b82f6'
+  if (isFailed) {
+    displayText = 'Stem separation failed'
+    pct = 100
+  } else if (isCancelled) {
+    displayText = 'Stem separation cancelled'
+    pct = 100
+  }
+
+  const baseColor = isA ? '#1db954' : '#3b82f6'
+  const activeColor = isFailed ? '#ef4444' : isCancelled ? '#eab308' : baseColor
 
   return (
-    <div style={{ width: '35%', display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '10px' }}>
+    <div style={{ 
+      width: '35%', 
+      display: 'flex', 
+      flexDirection: 'column', 
+      gap: '4px', 
+      visibility: isIdle ? 'hidden' : 'visible'
+    }}>
       <style>
         {`
           @keyframes stem-pulse-anim {
@@ -113,23 +89,24 @@ function StemProgress({ deckId }) {
         <div style={{ 
           width: `${pct}%`, 
           height: '100%', 
-          background: color, 
+          background: activeColor, 
           transition: 'width 0.3s ease',
-          boxShadow: `0 0 8px ${color}80`
+          boxShadow: `0 0 8px ${activeColor}80`
         }} />
       </div>
       <div 
         className={isProcessing ? 'stem-progress-pulse' : ''}
         style={{ 
         fontSize: '10px', 
-        color: '#888', 
+        color: isFailed ? '#ef4444' : isCancelled ? '#eab308' : '#888', 
         textAlign: isA ? 'left' : 'right', 
         fontFamily: 'monospace',
         whiteSpace: 'nowrap',
         overflow: 'hidden',
-        textOverflow: 'ellipsis'
+        textOverflow: 'ellipsis',
+        minHeight: '12px'
       }}>
-        {displayText}
+        {displayText || 'Idle'}
       </div>
     </div>
   )
@@ -440,8 +417,17 @@ export function ControllerSurface() {
       {/* Crossfader */}
       <Crossfader />
 
-      {/* Stem Progress Bars */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0 40px', marginTop: '4px', position: 'relative', zIndex: 10 }}>
+      {/* Stem Progress Bars (Absolute positioned to avoid dead space) */}
+      <div style={{ 
+        position: 'absolute', 
+        bottom: '8px', 
+        left: '24px', 
+        right: '24px', 
+        display: 'flex', 
+        justifyContent: 'space-between', 
+        pointerEvents: 'none',
+        zIndex: 10 
+      }}>
         <StemProgress deckId="A" />
         <StemProgress deckId="B" />
       </div>

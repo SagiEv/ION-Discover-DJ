@@ -60,6 +60,7 @@ export function useMidi() {
   const deckB_isSyncEnabled = useAppStore(s => s.deckB.isSyncEnabled)
   const scratchModeEnabled = useAppStore(s => s.scratchModeEnabled)
   const midiConnected = useAppStore(s => s.midiConnected)
+  const midiMapping = useAppStore(s => s.midiMapping)
 
   useEffect(() => {
     if (midiCtrl) return
@@ -155,6 +156,7 @@ export function useMidi() {
     deckB_isPlaying, deckB_isReversed, deckB_isSyncEnabled,
     scratchModeEnabled,
     midiConnected, // re-run if re-connected
+    midiMapping,   // re-run when mapping is loaded/updated
   ])
 
   return { midiCtrl, midiMapper }

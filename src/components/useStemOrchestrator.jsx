@@ -60,23 +60,36 @@ export function useStemOrchestrator() {
           useAppStore.getState().removeStemProcess(nextItem.trackId)
         }
       } catch (error) {
+        const errorMsg = error?.message || String(error)
+        
+        // Also check if the store itself already marked it as cancelled (e.g. from the UI button)
+        const currentState = useAppStore.getState()
+        const queueItem = currentState.stemQueue.find(i => i.trackId === nextItem.trackId)
+        const wasExplicitlyCancelled = queueItem && queueItem.status === 'cancelled'
+        
+        const isCancelled = wasExplicitlyCancelled || errorMsg.toLowerCase().includes('cancel')
+        
         console.error('Stem Queue processing error:', error)
-        updateStemProgress(nextItem.trackId, { status: 'error', progress: 'Failed', error: error.message })
+        updateStemProgress(nextItem.trackId, { 
+          status: isCancelled ? 'cancelled' : 'error', 
+          progress: isCancelled ? 'Canceled' : 'Failed', 
+          error: isCancelled ? null : error.message 
+        })
 
         // Also update deck UI so it stops showing stale progress
         const state = useAppStore.getState()
         if (state.deckA.track?.stemTrackId === nextItem.trackId) {
-          state.updateDeck('A', { stemsFailed: true, stemsProgress: '' })
+          state.updateDeck('A', { stemsFailed: isCancelled ? 'cancelled' : true, stemsProgress: '' })
         }
         if (state.deckB.track?.stemTrackId === nextItem.trackId) {
-          state.updateDeck('B', { stemsFailed: true, stemsProgress: '' })
+          state.updateDeck('B', { stemsFailed: isCancelled ? 'cancelled' : true, stemsProgress: '' })
         }
 
-        // Show failure toast
+        // Show toast
         try {
           useAppStore.getState().addToast(
-            `Stem separation failed: ${nextItem.track.name}`,
-            'error',
+            isCancelled ? `Stem separation canceled: ${nextItem.track.name}` : `Stem separation failed: ${nextItem.track.name}`,
+            isCancelled ? 'warning' : 'error',
             6000
           )
         } catch (_) { /* never crash on notification */ }

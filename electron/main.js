@@ -469,14 +469,19 @@ ipcMain.handle('load-default-library', async (_, settings) => {
         
         // Try to recover videoId from sidecar .meta.json file
         let videoId = null
+        let hasSubtitles = false
         try {
           if (fs.existsSync(metaPath)) {
             const meta = JSON.parse(fs.readFileSync(metaPath, 'utf8'))
             videoId = meta.videoId || null
           }
+          const subPath = path.join(songsDir, `${baseName}.json`)
+          if (fs.existsSync(subPath)) {
+            hasSubtitles = true
+          }
         } catch (_) {}
         
-        results.push({ path: filePath, videoId })
+        results.push({ path: filePath, videoId, hasSubtitles })
       }
     }
   } catch (e) {

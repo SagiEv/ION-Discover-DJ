@@ -1,3 +1,5 @@
+import { getTrackId, useAppStore } from '../store/appStore.js'
+
 /**
  * Utility to convert an AudioBuffer to a WAV ArrayBuffer.
  */
@@ -136,7 +138,7 @@ export async function processStems(audioBuffer, audioEngine, trackId) {
 }
 
 export async function processLibraryTrackStems(track, audioEngine) {
-  const trackId = track.stemTrackId || track.videoId || (track.path ? `local_${Math.abs(track.path.toLowerCase().replace(/\\/g, '/').split('').reduce((a, b) => { a = ((a << 5) - a) + b.charCodeAt(0); return a & a }, 0)).toString(36)}` : null);
+  const trackId = getTrackId(track);
   
   if (!trackId) throw new Error('Invalid track')
   
@@ -146,17 +148,36 @@ export async function processLibraryTrackStems(track, audioEngine) {
     return existing
   }
 
+  // Helper to allow cancelling during the heavy frontend processing phase
+  const checkCancelled = () => {
+    const { stemQueue } = useAppStore.getState()
+    const item = stemQueue.find(i => i.trackId === trackId)
+    if (!item || item.status === 'cancelled') {
+      throw new Error('Cancelled')
+    }
+  }
+
+  const { updateStemProgress } = useAppStore.getState()
+
   console.log(`[StemSeparator] Background queue reading ${track.path}...`)
+  updateStemProgress(trackId, { progress: 'Reading audio...' })
+  checkCancelled()
   const arr = await window.electronAPI.readAudioFile(track.path)
   
   console.log(`[StemSeparator] Background queue decoding ${track.path}...`)
+  updateStemProgress(trackId, { progress: 'Decoding audio...' })
+  checkCancelled()
   let audioBuffer = await audioEngine.decodeAudio(arr)
   
   console.log(`[StemSeparator] Background queue converting to WAV...`)
+  updateStemProgress(trackId, { progress: 'Converting to WAV...' })
+  checkCancelled()
   let wavBuffer = audioBufferToWav(audioBuffer)
   audioBuffer = null // Free memory
   
   console.log(`[StemSeparator] Background queue starting separation...`)
+  updateStemProgress(trackId, { progress: 'Sending to AI engine...' })
+  checkCancelled()
   const stemPaths = await window.electronAPI.separateStems(wavBuffer, trackId)
   wavBuffer = null // Free memory
   

@@ -22,6 +22,7 @@ const genId = () => Date.now().toString(36) + '_' + Math.random().toString(36).s
 // ─── Deck slice ────────────────────────────────────────────────────────────────
 const makeDeckState = () => ({
   track: null,          // { name, path, duration, bpm, waveform }
+  isLoading: false,
   isPlaying: false,
   isReversed: false,
   isScratchMode: false,
@@ -184,12 +185,19 @@ export const useAppStore = create(persist((set, get) => ({
   queueStemProcess: (track, prioritize = false) => set(state => {
     const trackId = getTrackId(track)
     if (!trackId) return state
-    if (state.stemQueue.some(item => item.trackId === trackId)) {
-      // If already in queue and we need to prioritize, bump it to the front
+    if (state.stemQueue.some(i => i.trackId === trackId)) {
+      const existing = state.stemQueue.find(i => i.trackId === trackId)
       if (prioritize) {
-        const existing = state.stemQueue.find(i => i.trackId === trackId)
+        // Move to top of queue but below the currently processing one
         const rest = state.stemQueue.filter(i => i.trackId !== trackId)
-        return { stemQueue: [existing, ...rest] }
+        // Reset status to pending so the orchestrator will pick it up again
+        const updatedExisting = {
+          ...existing,
+          status: (existing.status === 'error' || existing.status === 'cancelled') ? 'pending' : existing.status,
+          progress: (existing.status === 'error' || existing.status === 'cancelled') ? 'Pending...' : existing.progress,
+          error: (existing.status === 'error' || existing.status === 'cancelled') ? null : existing.error
+        }
+        return { stemQueue: [updatedExisting, ...rest] }
       }
       return state // Already in queue
     }
@@ -216,16 +224,26 @@ export const useAppStore = create(persist((set, get) => ({
     )
   })),
   
-  removeStemProcess: (trackId) => set(state => ({
-    stemQueue: state.stemQueue.filter(item => item.trackId !== trackId)
-  })),
+  removeStemProcess: (trackId) => set(state => {
+    // If the track is currently loaded in a deck and waiting for stems, mark it as cancelled
+    const deckAUpdate = (state.deckA.track?.stemTrackId === trackId) ? { stemsFailed: 'cancelled', stemsProgress: '' } : {}
+    const deckBUpdate = (state.deckB.track?.stemTrackId === trackId) ? { stemsFailed: 'cancelled', stemsProgress: '' } : {}
+
+    return {
+      stemQueue: state.stemQueue.filter(item => item.trackId !== trackId),
+      deckA: { ...state.deckA, ...deckAUpdate },
+      deckB: { ...state.deckB, ...deckBUpdate }
+    }
+  }),
 
   cancelStemProcess: (trackId) => {
     if (window.electronAPI.cancelDemucs) {
       window.electronAPI.cancelDemucs(trackId)
     }
     set(state => ({
-      stemQueue: state.stemQueue.filter(item => item.trackId !== trackId)
+      stemQueue: state.stemQueue.map(item => 
+        item.trackId === trackId ? { ...item, status: 'cancelled', progress: 'Cancelled' } : item
+      )
     }))
   },
 
@@ -584,6 +602,7 @@ export const useAppStore = create(persist((set, get) => ({
     crossfader: state.crossfader,
     masterVolume: state.masterVolume,
     eqMode: state.eqMode,
+    scratchModeEnabled: state.scratchModeEnabled,
     _deckA: {
       volume: state.deckA.volume,
       treble: state.deckA.treble,

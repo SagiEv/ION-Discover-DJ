@@ -44,6 +44,13 @@ class DJController {
   // ─── Load a track onto a deck ──────────────────────────────────────────────
   async loadTrack(deckId, trackInfo) {
     const { path, name } = trackInfo
+
+    // Immediately update store for loading indication
+    useAppStore.getState().updateDeck(deckId, {
+      isLoading: true,
+      track: { ...trackInfo, waveform: null, bpm: 0 }
+    })
+
     await this.engine.resume()
 
     const arrayBuffer = await window.electronAPI.readAudioFile(path)
@@ -59,6 +66,13 @@ class DJController {
     const deck = deckId === 'A' ? this.engine.deckA : this.engine.deckB
     deck.bpm = bpm
 
+    // If the loaded track is currently at the top of the queue, consume it
+    const storeState = useAppStore.getState()
+    const deckKey = deckId === 'A' ? 'deckA' : 'deckB'
+    if (storeState[deckKey].queue.length > 0 && storeState[deckKey].queue[0].path === trackInfo.path) {
+      storeState.removeFromQueue(deckId, 0)
+    }
+
     const hashString = (str) => {
       let hash = 0;
       for (let i = 0; i < str.length; i++) {
@@ -72,6 +86,7 @@ class DJController {
 
     useAppStore.getState().updateDeck(deckId, {
       track: { ...trackInfo, waveform, bpm, stemTrackId: trackId },
+      isLoading: false,
       isPlaying: false,
       position: 0,
       duration: audioBuffer.duration,
@@ -111,7 +126,10 @@ class DJController {
   // ─── Play / Stutter ────────────────────────────────────────────────────────
   playStutter(deckId) {
     const deck = this._deck(deckId)
-    if (!deck.originalBuffer) return
+    if (!deck.originalBuffer) {
+      this._playNextInQueue(deckId)
+      return
+    }
     this.engine.resume()
     if (deck.isPlaying) {
       deck.stutter()
@@ -139,7 +157,10 @@ class DJController {
 
   togglePlay(deckId) {
     const deck = this._deck(deckId)
-    if (!deck.originalBuffer) return
+    if (!deck.originalBuffer) {
+      this._playNextInQueue(deckId)
+      return
+    }
     if (deck.isPlaying) {
       this.pause(deckId)
     } else {

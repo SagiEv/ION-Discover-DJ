@@ -83,6 +83,7 @@ function QueuePanel({ deckId }) {
         )}
       </div>
 
+
       {/* Now Playing */}
       {deckState.track && (
         <div className={`deck-queue__now-playing deck-queue__now-playing--${deckId.toLowerCase()}`}>
