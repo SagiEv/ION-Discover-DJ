@@ -59,6 +59,13 @@ class DJController {
     const deck = deckId === 'A' ? this.engine.deckA : this.engine.deckB
     deck.bpm = bpm
 
+    // If the loaded track is currently at the top of the queue, consume it
+    const storeState = useAppStore.getState()
+    const deckKey = deckId === 'A' ? 'deckA' : 'deckB'
+    if (storeState[deckKey].queue.length > 0 && storeState[deckKey].queue[0].path === trackInfo.path) {
+      storeState.removeFromQueue(deckId, 0)
+    }
+
     const hashString = (str) => {
       let hash = 0;
       for (let i = 0; i < str.length; i++) {
