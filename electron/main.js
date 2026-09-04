@@ -59,7 +59,12 @@ function createWindow() {
   })
 }
 
+const { autoUpdater } = require('electron-updater')
+
 app.whenReady().then(() => {
+  // Check for updates
+  autoUpdater.checkForUpdatesAndNotify()
+
   // Register protocol to serve local audio files securely
   protocol.registerFileProtocol('localfile', (request, callback) => {
     const filePath = decodeURIComponent(request.url.replace('localfile://', ''))
