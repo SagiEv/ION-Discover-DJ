@@ -1,0 +1,36 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'package.json' # Trigger when package.json version changes
+  workflow_dispatch:
+
+jobs:
+  build-and-release:
+    runs-on: windows-latest # We need windows to build .exe properly
+    permissions:
+      contents: write # Needed to create GitHub Releases
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build and Publish Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # electron-builder will read the GH_TOKEN and automatically create a release
+          # on GitHub with the binaries based on package.json version
+          npm run build -- --publish always

@@ -1,6 +1,6 @@
 {
   "name": "discovertubedj",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "ION Discovery DJ × Youtube — local file DJ app",
   "main": "electron/main.js",
   "scripts": {
@@ -8,11 +8,16 @@
     "dev:renderer": "vite",
     "dev:electron": "wait-on http://localhost:5173 && cross-env NODE_ENV=development electron .",
     "build": "vite build && electron-builder",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:yt-dlp": "node test/yt-dlp.test.js"
   },
   "keywords": [],
   "author": "SagiEv",
   "license": "ISC",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/SagiEv/ION-Discover-DJ.git"
+  },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.5.1",
     "concurrently": "^9.1.2",
@@ -29,7 +34,7 @@
     "onnxruntime-node": "^1.27.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
-    "youtube-dl-exec": "^3.1.9",
+    "youtube-dl-exec": "^3.1.14",
     "youtube-transcript": "^1.3.1",
     "youtubei.js": "^17.2.0",
     "yt-search": "^2.13.1",
@@ -39,6 +44,13 @@
     "appId": "com.discovertubedj.app",
     "productName": "DiscoverTube DJ",
     "executableName": "DiscoverTubeDJ",
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "SagiEv",
+        "repo": "ION-Discover-DJ"
+      }
+    ],
     "directories": {
       "output": "dist-app"
     },
@@ -62,7 +74,8 @@
     },
     "asarUnpack": [
       "**/node_modules/demucs/**/*",
-      "**/node_modules/onnxruntime-node/**/*"
+      "**/node_modules/onnxruntime-node/**/*",
+      "**/node_modules/youtube-dl-exec/**/*"
     ]
   }
 }
