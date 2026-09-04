@@ -1,0 +1,70 @@
+name: yt-dlp Auto Updater
+
+on:
+  schedule:
+    - cron: '0 0 * * 0' # Every Sunday at midnight
+  workflow_dispatch:
+
+jobs:
+  test-and-update:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Test YouTube download
+        id: test
+        continue-on-error: true
+        run: npm run test:yt-dlp
+
+      - name: Attempt update if test failed
+        id: update
+        if: steps.test.outcome == 'failure'
+        run: |
+          echo "Test failed. Attempting to update youtube-dl-exec to latest..."
+          npm install youtube-dl-exec@latest
+          
+          echo "Re-running test..."
+          npm run test:yt-dlp
+          echo "Update successful and test passed!"
+
+      - name: Bump Version
+        if: steps.test.outcome == 'failure' && steps.update.outcome == 'success'
+        run: |
+          # Bump the patch version without creating a git tag (so release workflow handles tags)
+          npm version patch --no-git-tag-version
+
+      - name: Create Pull Request
+        if: steps.test.outcome == 'failure' && steps.update.outcome == 'success'
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "chore(deps): update youtube-dl-exec to latest and bump version"
+          title: "Automated Fix: Update youtube-dl-exec to bypass 403 blocks"
+          body: |
+            The automated weekly check detected that YouTube downloads were failing (likely due to new bot protections).
+            
+            `youtube-dl-exec` has been updated to the latest version, and the tests are now passing successfully!
+            
+            The `package.json` version has also been incremented. Merging this PR will trigger the release workflow.
+          branch: "auto-update-yt-dlp"
+          labels: "automated, dependencies"
+          
+      - name: Fail workflow if update didn't fix the issue
+        if: steps.test.outcome == 'failure' && steps.update.outcome == 'failure'
+        run: |
+          echo "Even after updating youtube-dl-exec, the download test still failed."
+          echo "Manual intervention is required to find a new workaround."
+          exit 1
